@@ -1,0 +1,225 @@
+<header class="top">
+  <div class="brand">
+    <h1>Arène des Loups</h1>
+    <p class="tag">Des IA anonymes, des loups, un village.</p>
+  </div>
+</header>
+<nav class="tabbar" role="tablist" aria-label="Navigation">
+  <button id="tab-play" class="tab" data-view="play" role="tab" type="button"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Partie</button>
+  <button id="tab-setup" class="tab" data-view="setup" role="tab" type="button"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Réglages</button>
+  <button id="tab-stats" class="tab" data-view="stats" role="tab" type="button"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>Stats</button>
+</nav>
+
+<main>
+  <!-- RÉGLAGES -->
+  <section id="view-setup" class="view" hidden>
+    <div class="card" id="engine-card">
+      <h2>Moteur</h2>
+      <p id="env-note" class="note"></p>
+      <div id="key-block">
+        <label for="or-key">Clé OpenRouter</label>
+        <div class="row">
+          <input id="or-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-v1-…">
+          <button id="or-key-toggle" class="ghost" type="button">Voir</button>
+          <button id="or-key-check" class="ghost" type="button">Vérifier</button>
+        </div>
+        <p id="key-status" class="hint">La clé reste dans ce navigateur, sur ton téléphone. Elle n'est envoyée qu'à OpenRouter.</p>
+        <p class="hint">Conseil : crée une clé avec un plafond de crédit sur openrouter.ai. Si tu ajoutes la page à l'écran d'accueil, elle garde sa propre clé et ses propres stats, séparées de Safari.</p>
+      </div>
+    </div>
+
+    <div class="card" id="roster-card">
+      <h2>Mes IA</h2>
+      <p class="hint">Les modèles qui peuvent s'asseoir à la table. Ajoute-en depuis le catalogue OpenRouter, puis répartis-les sur les sièges.</p>
+      <ul id="roster" class="roster"></ul>
+      <label for="model-search">Ajouter une IA
+        <input id="model-search" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Rechercher : gemini, llama, deepseek, mistral…">
+      </label>
+      <ul id="model-results" class="results"></ul>
+      <p id="catalog-status" class="hint"></p>
+      <button id="spread-btn" class="primary" type="button">Répartir mes IA sur les sièges</button>
+    </div>
+
+    <div class="card">
+      <h2>Composition</h2>
+      <div class="grid2">
+        <label for="nplayers">Joueurs
+          <select id="nplayers">
+            <option value="5">5</option><option value="6">6</option><option value="7">7</option>
+            <option value="8">8</option><option value="9">9</option><option value="10">10</option>
+          </select>
+        </label>
+        <label for="nwolves">Loups-Garous
+          <select id="nwolves">
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+          </select>
+        </label>
+      </div>
+      <div class="row wrap">
+        <label class="check" for="has-seer"><input id="has-seer" type="checkbox"> Voyante</label>
+        <label class="check" for="has-witch"><input id="has-witch" type="checkbox"> Sorcière</label>
+      </div>
+      <p id="compo-note" class="note"></p>
+      <p id="compo-warn" class="error" hidden></p>
+    </div>
+
+    <div class="card">
+      <h2 id="seats-title">Les 8 sièges</h2>
+      <p class="hint">Chaque partie mélange les sièges : les modèles deviennent « Joueur 1 », « Joueur 2 »… et reçoivent un rôle au hasard. Mets le même modèle sur deux sièges pour avoir plus de statistiques.</p>
+            <ol id="seats" class="seats"></ol>
+      <div class="row wrap">
+        <button id="preset-btn" class="ghost" type="button">Remettre les modèles par défaut</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Déroulé</h2>
+      <div class="grid2">
+        <label for="rounds">Tours de parole par jour
+          <select id="rounds">
+            <option value="1">1 tour</option>
+            <option value="2" selected>2 tours</option>
+            <option value="3">3 tours</option>
+          </select>
+        </label>
+        <label for="maxdays">Jours maximum
+          <select id="maxdays">
+            <option value="6">6</option>
+            <option value="8">8</option>
+            <option value="10" selected>10</option>
+          </select>
+        </label>
+      </div>
+      <label class="check" for="mayor"><input id="mayor" type="checkbox"> Présentations et élection du Maire avant la première nuit</label>
+      <div class="grid2">
+        <label for="series-size">Parties par série
+          <select id="series-size">
+            <option value="1">1 (partie seule)</option><option value="3">3</option><option value="5">5</option><option value="10">10</option>
+          </select>
+        </label>
+        <label id="memory-wrap" for="memory">Mémoire des IA
+          <select id="memory">
+            <option value="0">Aucune</option><option value="1">Dernière partie</option><option value="2">2 dernières</option><option value="3">3 dernières</option><option value="5">5 dernières</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint">Dans une série, chaque IA garde le même pseudonyme d'une partie à l'autre et se souvient de ses dernières parties : rôles révélés, votes, accusations, mensonges. Les rôles sont retirés au hasard à chaque partie.</p>
+    </div>
+
+    <div id="replace-confirm" class="confirm" hidden>
+      <span id="replace-text"></span>
+      <button id="replace-yes" class="primary" type="button">Lancer quand même</button>
+      <button id="replace-no" class="ghost" type="button">Annuler</button>
+    </div>
+    <button id="start-btn" class="primary big" type="button">Lancer une partie</button>
+    <p id="setup-error" class="error" hidden></p>
+  </section>
+
+  <!-- PARTIE -->
+  <section id="view-play" class="view">
+    <div id="idle" class="card intro">
+      <h2>Prêt pour une partie ?</h2>
+      <p>Les IA reçoivent un rôle secret et un seul objectif : faire gagner leur camp. Elles débattent à tour de rôle, mentent si besoin, puis votent. Tu peux regarder en coulisses ou prendre un siège toi-même.</p>
+      <ol class="steps">
+        <li>Règle les 8 sièges et, si besoin, ta clé dans <b>Réglages</b>.</li>
+        <li>Lance la partie et suis le débat.</li>
+        <li>Compare les modèles dans <b>Stats</b>.</li>
+      </ol>
+      <div id="current-resume" class="confirm" hidden>
+        <span id="current-resume-text"></span>
+        <button id="current-resume-btn" class="primary" type="button">Reprendre</button>
+        <button id="current-drop-btn" class="ghost danger" type="button">Abandonner</button>
+      </div>
+      <div id="series-resume" class="confirm" hidden>
+        <span id="series-resume-text"></span>
+        <button id="series-resume-btn" class="primary" type="button">Reprendre</button>
+        <button id="series-drop-btn" class="ghost danger" type="button">Abandonner</button>
+      </div>
+      <button id="idle-start" class="primary big" type="button">Lancer une partie</button>
+    </div>
+
+    <div id="game" hidden>
+      <p id="series-label" class="eyebrow" hidden></p>
+      <div id="band" class="phase-band night">
+        <span class="astre" aria-hidden="true"></span>
+        <div><div id="phase-label" class="t">Nuit 1</div><div id="phase-sub" class="s"></div></div>
+        <div id="phase-count" class="count"></div>
+      </div>
+      <div class="statusbar">
+        <div class="controls">
+          <label class="switch" for="reveal"><input id="reveal" type="checkbox"><span>Coulisses</span></label>
+          <button id="pause-btn" class="ghost" type="button">Pause</button>
+          <button id="stop-btn" class="ghost danger" type="button">Arrêter</button>
+        </div>
+      </div>
+      <ul id="players" class="players"></ul>
+      <div id="stop-confirm" class="confirm" hidden>
+        <span>Arrêter la partie ? Elle ne comptera pas dans les stats.</span>
+        <button id="stop-yes" class="primary" type="button">Arrêter</button>
+        <button id="stop-no" class="ghost" type="button">Continuer</button>
+      </div>
+      <ol id="feed" class="feed" aria-live="polite"></ol>
+      <div id="thinking" class="thinking" hidden><span class="dot"></span><span id="thinking-text">…</span></div>
+      <div id="result" class="card result" hidden></div>
+    </div>
+
+    <!-- Tour du joueur humain -->
+    <div id="human" class="sheet fixed" hidden>
+      <div class="sheet-inner">
+        <span class="grab" aria-hidden="true"></span>
+        <p class="eyebrow" id="human-role"></p>
+        <h3 id="human-title">À toi de jouer</h3>
+        <details id="human-memo" class="memo"><summary>Ce que tu sais</summary><ul id="human-memo-list"></ul></details>
+        <p id="human-desc" class="hint"></p>
+        <div id="human-targets" class="targets"></div>
+        <div id="human-witch" hidden>
+          <label class="check" for="human-save"><input id="human-save" type="checkbox"> Utiliser la potion de vie</label>
+          <label for="human-poison">Potion de mort
+            <select id="human-poison"></select>
+          </label>
+        </div>
+        <textarea id="human-text" rows="4" maxlength="600" placeholder="Ton message au village…" hidden></textarea>
+        <button id="human-send" class="primary big" type="button">Valider</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <section id="view-stats" class="view" hidden>
+    <div class="card">
+      <h2>Classement des modèles</h2>
+      <label id="stats-compo-wrap" for="stats-compo" hidden>Composition comparée
+        <select id="stats-compo"></select>
+      </label>
+      <p id="stats-empty" class="hint">Aucune partie terminée pour l'instant. Les chiffres apparaîtront ici après ta première partie.</p>
+      <div class="tablewrap"><table id="stats-table" hidden>
+        <thead><tr>
+          <th>Modèle</th><th title="Parties jouées">Parties</th><th title="Taux de victoire">Victoires</th><th title="Victoires en Loup">En loup</th><th title="Victoires côté Village">Au village</th><th title="Part de la partie passée en vie">Survie</th><th title="Mensonges par prise de parole">Mensonges</th><th title="Votes contre le camp adverse">Votes justes</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <details class="legend"><summary>Comment lire ces chiffres</summary>
+        <p><b>Survie</b> : part moyenne de la partie passée en vie. <b>Mensonges</b> : affirmations publiques (sur son propre rôle ou celui d'un autre) qui contredisent ce que le joueur savait, rapportées au nombre de prises de parole. <b>Votes justes</b> : votes dirigés contre le camp adverse.</p>
+      </details>
+    </div>
+    <div class="card">
+      <h2>Par rôle</h2>
+      <div class="tablewrap"><table id="roles-table"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <h2>Historique</h2>
+      <ul id="history" class="history"></ul>
+      <div class="row wrap">
+        <button id="export-btn" class="ghost" type="button">Copier les données (JSON)</button>
+        <button id="reset-btn" class="ghost danger" type="button">Effacer l'historique</button>
+      </div>
+      <div id="reset-confirm" class="confirm" hidden>
+        <span>Effacer toutes les parties enregistrées ?</span>
+        <button id="reset-yes" class="primary" type="button">Effacer</button>
+        <button id="reset-no" class="ghost" type="button">Annuler</button>
+      </div>
+      <textarea id="export-box" rows="5" readonly hidden></textarea>
+      <p id="stats-msg" class="hint"></p>
+    </div>
+  </section>
+</main>
