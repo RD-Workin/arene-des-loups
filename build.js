@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const src = (f) => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
 const hosted = process.env.HOSTED_URL || '';
+fs.mkdirSync(path.join(__dirname, 'dist'), { recursive: true });
 
 const fonts = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400&family=IM+Fell+French+Canon+SC&display=swap">';
 const engine = `const Engine = (function () {\n${src('engine.js')}\nreturn { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, compoText, normalizeRole, gameRecap };\n})();`;

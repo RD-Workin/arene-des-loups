@@ -1,0 +1,3025 @@
+<title>Arène des Loups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400&family=IM+Fell+French+Canon+SC&display=swap">
+<style>
+/* Arène des Loups · feuille de style de design (mobile d'abord, iPhone Safari).
+   Reprend les jetons et polices de loup-garou-arena/src/style.css et garde ses noms
+   de classes (.card, .pl, .ev, .sheet, .targets, .pill) pour que l'app puisse l'adopter
+   par petites touches. Nouveautés : barre d'onglets en bas (pouce), bandeau de phase
+   jour/nuit, cercle de joueurs défilant, compteurs de composition, écran de vote avec
+   décompte, écrans d'action de nuit, écran de fin.
+   Concept : une colonne, l'action en bas de l'écran, la nuit assombrit tout le bandeau. */
+
+:root {
+  --bg: #eceef3; --surface: #ffffff; --surface-2: #f4f5f9; --line: #d7dae4;
+  --ink: #1a1e2c; --muted: #5a6074; --accent: #9a1b30; --accent-ink: #ffffff;
+  --moon: #9a6a0c; --village: #24617f; --wolf: #9a1b30; --ok: #2e7a4a;
+  --seer: #6a3fa0; --witch: #2e7a4a;
+  --night: #dfe3ee; --night-band: #1b2140; --night-ink: #e9e4d4; --day-band: #f7e7c2; --day-ink: #3b2a08;
+  --f-display: "IM Fell French Canon SC", "Iowan Old Style", Georgia, serif;
+  --f-body: "Atkinson Hyperlegible", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --r: 10px; --tap: 44px;
+  --tabbar-h: 58px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1220; --surface: #171b2b; --surface-2: #1e2336; --line: #2b3149;
+    --ink: #e8e6df; --muted: #9a9fb3; --accent: #e25a6f; --accent-ink: #160a0d;
+    --moon: #e7b94a; --village: #73b6d6; --wolf: #e25a6f; --ok: #6fc28e;
+    --seer: #b796e6; --witch: #6fc28e;
+    --night: #12162a; --night-band: #0a0d1a; --night-ink: #e9e4d4; --day-band: #2d2610; --day-ink: #f3dfa8;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1220; --surface: #171b2b; --surface-2: #1e2336; --line: #2b3149;
+  --ink: #e8e6df; --muted: #9a9fb3; --accent: #e25a6f; --accent-ink: #160a0d;
+  --moon: #e7b94a; --village: #73b6d6; --wolf: #e25a6f; --ok: #6fc28e;
+  --seer: #b796e6; --witch: #6fc28e;
+  --night: #12162a; --night-band: #0a0d1a; --night-ink: #e9e4d4; --day-band: #2d2610; --day-ink: #f3dfa8;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--ink); }
+body { font-family: var(--f-body); font-size: 16px; line-height: 1.45; margin: 0; -webkit-text-size-adjust: 100%;
+  padding-inline: 16px; padding-block: 0 calc(var(--tabbar-h) + 24px + env(safe-area-inset-bottom, 0px)); }
+.wrap { max-width: 640px; margin-inline: auto; display: grid; gap: 14px; min-width: 0; }
+
+/* ---------- Typo ---------- */
+h1, h2, h3 { font-family: var(--f-display); font-weight: 400; margin: 0; text-wrap: balance; line-height: 1.1; }
+h1 { font-size: 1.9rem; } h2 { font-size: 1.35rem; } h3 { font-size: 1.15rem; }
+.eyebrow { margin: 0; font-size: .72rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; }
+.hint { color: var(--muted); font-size: .88rem; margin: 0; }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- Surfaces ---------- */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 10px; min-width: 0; }
+.card > h2 + .hint { margin-top: -4px; }
+
+/* ---------- Boutons ---------- */
+button { font: inherit; cursor: pointer; border-radius: 8px; min-height: var(--tap); -webkit-tap-highlight-color: transparent; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--moon); outline-offset: 2px; }
+.btn { border: 1px solid var(--line); background: transparent; color: var(--ink); padding: 8px 14px; font-weight: 700; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.big { width: 100%; font-size: 1.05rem; padding: 14px; }
+.btn.danger { color: var(--wolf); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+
+/* ---------- Champs ---------- */
+label { display: grid; gap: 4px; font-size: .9rem; font-weight: 700; }
+input[type="text"], input[type="password"], select, textarea {
+  font: inherit; font-size: 16px; /* 16px évite le zoom auto de Safari iOS */
+  font-weight: 400; color: var(--ink); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px; width: 100%; min-width: 0; min-height: var(--tap);
+}
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* ---------- Barre du haut (sticky) ---------- */
+.appbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; margin-inline: -16px; padding: 10px 16px;
+  background: var(--bg); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.appbar h1 { font-size: 1.35rem; }
+.appbar .acts { display: flex; gap: 6px; }
+.icon-btn { min-width: var(--tap); padding: 0 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: .85rem; font-weight: 700; }
+
+/* ---------- Barre d'onglets en bas (zone du pouce) ---------- */
+.tabbar { position: fixed; inset: auto 0 0 0; z-index: 15; display: grid; grid-template-columns: repeat(3, 1fr);
+  background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.tabbar button { border: 0; background: transparent; color: var(--muted); border-radius: 0; height: var(--tabbar-h);
+  display: grid; place-items: center; align-content: center; gap: 2px; font-size: .75rem; font-weight: 700; }
+.tabbar button .glyph { width: 22px; height: 22px; }
+.tabbar button[aria-selected="true"] { color: var(--accent); }
+
+/* ---------- Bandeau de phase ---------- */
+.phase-band { border-radius: var(--r); padding: 14px 16px; display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; }
+.phase-band.night { background: var(--night-band); color: var(--night-ink); }
+.phase-band.day { background: var(--day-band); color: var(--day-ink); }
+.phase-band .astre { width: 34px; height: 34px; border-radius: 50%; }
+.phase-band.night .astre { background: var(--moon); box-shadow: inset -9px -3px 0 0 var(--night-band); }
+.phase-band.day .astre { background: var(--moon); box-shadow: 0 0 0 5px color-mix(in srgb, var(--moon) 25%, transparent); }
+.phase-band .t { font-family: var(--f-display); font-size: 1.45rem; line-height: 1; }
+.phase-band .s { font-size: .85rem; opacity: .8; }
+.phase-band .count { font-family: var(--f-mono); font-size: .8rem; text-align: right; opacity: .85; }
+.steps-bar { display: flex; gap: 4px; margin-top: 8px; grid-column: 1 / -1; }
+.steps-bar i { flex: 1; height: 4px; border-radius: 2px; background: currentColor; opacity: .2; }
+.steps-bar i.on { opacity: .9; }
+
+/* ---------- Cercle des joueurs (défilement horizontal) ---------- */
+.players { list-style: none; margin: 0 -16px; padding: 2px 16px 6px; display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; }
+.players::-webkit-scrollbar { display: none; }
+.pl { flex: 0 0 auto; width: 64px; display: grid; justify-items: center; gap: 4px; scroll-snap-align: start; text-align: center; }
+.pl .tok { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; position: relative;
+  background: var(--surface); border: 2px solid var(--line); font-family: var(--f-display); font-size: 1.35rem; }
+.pl .lbl { font-size: .7rem; color: var(--muted); line-height: 1.15; }
+.pl .role { font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.pl.wolf .role { color: var(--wolf); } .pl.village .role { color: var(--village); }
+.pl.seer .role { color: var(--seer); } .pl.witch .role { color: var(--witch); }
+.pl.speaking .tok { border-color: var(--moon); box-shadow: 0 0 0 3px color-mix(in srgb, var(--moon) 30%, transparent); }
+.pl.me .tok { border-color: var(--accent); }
+.pl.me .lbl { color: var(--accent); font-weight: 700; }
+.pl.dead { opacity: .45; }
+.pl.dead .tok::after { content: ""; position: absolute; inset: 50% 4px auto; height: 2px; background: var(--ink); transform: rotate(-35deg); }
+
+/* ---------- Fil du débat ---------- */
+.feed { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.ev { min-width: 0; }
+.ev.marker { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .1em; font-weight: 700; }
+.ev.marker::before, .ev.marker::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.ev.narr { background: var(--surface-2); border-radius: 8px; padding: 9px 12px; font-size: .93rem; }
+.ev.narr b { font-weight: 700; }
+.ev.night { background: var(--night); border: 1px dashed var(--line); border-radius: 8px; padding: 9px 12px; font-size: .9rem; }
+.ev.speech { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 8px; align-items: start; }
+.ev.speech .av { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--line); background: var(--surface); font-family: var(--f-display); font-size: 1rem; }
+.ev.speech .bub { background: var(--surface); border: 1px solid var(--line); border-radius: 4px 14px 14px 14px; padding: 8px 12px; min-width: 0; }
+.ev.speech .who { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; font-weight: 700; font-size: .88rem; }
+.ev.speech .who .round { font-weight: 400; color: var(--muted); font-size: .75rem; }
+.ev.speech .msg { margin: 3px 0 0; overflow-wrap: anywhere; }
+.ev.speech.mine { grid-template-columns: minmax(0, 1fr) 32px; }
+.ev.speech.mine .av { order: 2; border-color: var(--accent); }
+.ev.speech.mine .bub { border-color: var(--accent); border-radius: 14px 4px 14px 14px; }
+.pensee { margin: 6px 0 0; font-size: .82rem; color: var(--muted); border-left: 2px solid var(--line); padding-left: 8px; font-style: italic; }
+.pill { display: inline-block; font-size: .66rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; text-transform: uppercase; letter-spacing: .04em; }
+.pill.lie, .pill.wolf { color: var(--wolf); } .pill.village { color: var(--village); }
+.pill.seer { color: var(--seer); } .pill.witch { color: var(--witch); }
+.thinking { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: .88rem; padding: 4px 2px; }
+.dots { display: inline-flex; gap: 3px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--moon); animation: blink 1.2s infinite ease-in-out; }
+.dots i:nth-child(2) { animation-delay: .2s; } .dots i:nth-child(3) { animation-delay: .4s; }
+@keyframes blink { 50% { opacity: .2; } }
+
+/* Saisie humaine collée en bas, au-dessus des onglets */
+.composer { position: sticky; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 8px); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px;
+  background: var(--surface); border: 1px solid var(--accent); border-radius: 14px; padding: 8px; box-shadow: 0 6px 20px rgb(0 0 0 / .12); }
+.composer textarea { border: 0; background: transparent; resize: none; min-height: 44px; padding: 8px; }
+
+/* ---------- Vote ---------- */
+.ballot { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ballot button { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 8px; align-items: center; text-align: left;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); padding: 8px 10px; min-height: 56px; }
+.ballot button .av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--line); font-family: var(--f-display); font-size: 1.1rem; }
+.ballot button small { display: block; color: var(--muted); font-size: .75rem; font-weight: 400; }
+.ballot button[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.ballot button[aria-pressed="true"] .av { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.ballot button:disabled { opacity: .4; }
+.tally { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tally li { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr) 1.5rem; gap: 8px; align-items: center; font-size: .9rem; }
+.tally .track { height: 10px; background: var(--surface-2); border-radius: 5px; overflow: hidden; }
+.tally .fill { height: 100%; background: var(--muted); border-radius: 5px; }
+.tally li.lead .fill { background: var(--accent); }
+.tally li.lead { font-weight: 700; }
+.tally .n { font-family: var(--f-mono); text-align: right; }
+.votelog { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; font-family: var(--f-mono); font-size: .78rem; color: var(--muted); }
+.votelog li { background: var(--surface-2); border-radius: 6px; padding: 3px 7px; }
+
+/* ---------- Feuille d'action (nuit / vote humain) ---------- */
+.sheet { background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--accent); border-radius: 18px 18px var(--r) var(--r); padding: 16px; display: grid; gap: 12px; box-shadow: 0 -8px 30px rgb(0 0 0 / .12); }
+.sheet.fixed { position: fixed; inset: auto 0 0 0; border-radius: 18px 18px 0 0; max-height: 80dvh; overflow-y: auto; z-index: 20; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+.sheet .grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line); justify-self: center; margin-top: -6px; }
+.sheet.seer { border-top-color: var(--seer); } .sheet.witch { border-top-color: var(--witch); } .sheet.wolf { border-top-color: var(--wolf); }
+.sheet.seer .eyebrow { color: var(--seer); } .sheet.witch .eyebrow { color: var(--witch); } .sheet.wolf .eyebrow { color: var(--wolf); }
+.memo { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; font-size: .88rem; }
+.memo summary { font-weight: 700; cursor: pointer; min-height: 28px; }
+.memo ul { margin: 6px 0 0; padding-left: 1.1em; display: grid; gap: 3px; }
+.potions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.potion { border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: grid; gap: 6px; background: var(--surface-2); }
+.potion .ttl { font-weight: 700; display: flex; justify-content: space-between; gap: 6px; }
+.potion.used { opacity: .45; }
+.reveal { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 12px; align-items: center; background: color-mix(in srgb, var(--seer) 10%, var(--surface)); border: 1px solid var(--seer); border-radius: var(--r); padding: 12px; }
+
+/* ---------- Réglages ---------- */
+.stepper { display: grid; grid-template-columns: var(--tap) minmax(0, 1fr) var(--tap); align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface-2); }
+.stepper button { border: 0; border-radius: 0; background: transparent; color: var(--ink); font-size: 1.3rem; }
+.stepper output { text-align: center; font-family: var(--f-display); font-size: 1.6rem; }
+.compo { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.compo li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.compo li:last-child { border-bottom: 0; }
+.compo .name { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.compo .name i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.compo .desc { display: block; font-weight: 400; font-size: .8rem; color: var(--muted); }
+.mini-step { display: flex; align-items: center; gap: 4px; }
+.mini-step button { width: 36px; min-height: 36px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 0; }
+.mini-step output { width: 1.6rem; text-align: center; font-family: var(--f-mono); }
+.compo-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px; }
+.compo-bar span { display: block; }
+.ok-line { font-size: .85rem; color: var(--ok); font-weight: 700; margin: 0; }
+.seats { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.seat { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.seat .n { font-family: var(--f-mono); color: var(--muted); font-size: .85rem; }
+.seat .human-tag { font-size: .75rem; font-weight: 700; color: var(--accent); }
+.toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 700; }
+.toggle input { appearance: none; width: 50px; height: 30px; border-radius: 15px; background: var(--line); position: relative; flex: none; cursor: pointer; margin: 0; }
+.toggle input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--surface); transition: transform .15s; box-shadow: 0 1px 2px rgb(0 0 0 / .3); }
+.toggle input:checked { background: var(--ok); }
+.toggle input:checked::after { transform: translateX(20px); }
+.toggle span small { display: block; font-weight: 400; color: var(--muted); font-size: .8rem; }
+
+/* ---------- Fin de partie ---------- */
+.verdict { border-radius: var(--r); padding: 20px 16px; text-align: center; display: grid; gap: 6px; }
+.verdict.loups { background: color-mix(in srgb, var(--wolf) 14%, var(--surface)); border: 1px solid var(--wolf); }
+.verdict.village { background: color-mix(in srgb, var(--village) 14%, var(--surface)); border: 1px solid var(--village); }
+.verdict h2 { font-size: 2rem; }
+.verdict.loups h2 { color: var(--wolf); } .verdict.village h2 { color: var(--village); }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kpi { background: var(--surface-2); border-radius: 8px; padding: 10px; display: grid; gap: 2px; }
+.kpi b { font-family: var(--f-display); font-size: 1.5rem; font-weight: 400; }
+.kpi span { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.cast { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.cast li { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.cast li:last-child { border-bottom: 0; }
+.cast .av { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--line); font-family: var(--f-display); }
+.cast .mdl { font-family: var(--f-mono); font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cast .fate { font-size: .78rem; color: var(--muted); text-align: right; }
+.cast li.dead .who { text-decoration: line-through; text-decoration-color: var(--muted); }
+.tablewrap { overflow-x: auto; margin-inline: -16px; padding-inline: 16px; }
+table { border-collapse: collapse; width: 100%; font-size: .86rem; }
+th, td { text-align: right; padding: 8px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; }
+th { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+td.model { font-family: var(--f-mono); font-size: .78rem; }
+.bar { display: inline-block; height: 6px; border-radius: 3px; background: var(--moon); vertical-align: middle; margin-right: 6px; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ===== Compléments de l'app (après la feuille de design du fil « Design et ergonomie mobile ») ===== */
+.top, main { max-width: 640px; margin-inline: auto; }
+.top { padding-block: 18px 4px; }
+.brand h1 { font-size: 2rem; line-height: 1; letter-spacing: .01em; }
+.brand .tag { margin: 4px 0 0; color: var(--muted); font-size: .9rem; }
+main { display: grid; gap: 14px; }
+.view { display: grid; gap: 14px; min-width: 0; }
+.card h2 { margin: 0; }
+.note { font-size: .88rem; margin: 0; }
+.error { color: var(--wolf); font-weight: 700; margin: 0; }
+.ok { color: var(--ok); }
+.row.wrap { margin-top: 4px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+
+.primary { background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); padding: 10px 16px; font-weight: 700; }
+.primary.big { width: 100%; padding: 14px; font-size: 1.05rem; }
+.primary:disabled { opacity: .45; cursor: default; }
+.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); padding: 8px 12px; white-space: nowrap; font-weight: 700; }
+.ghost.danger { color: var(--wolf); }
+.check { display: flex; align-items: center; gap: 8px; font-weight: 400; }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); }
+
+.seat { grid-template-columns: 2.2rem minmax(0, 9rem) minmax(0, 1fr); }
+.seat .num { font-family: var(--f-mono); color: var(--muted); font-size: .85rem; }
+@media (max-width: 460px) { .seat { grid-template-columns: 1.6rem minmax(0, 1fr); } .seat .model { grid-column: 2; } }
+
+.intro p { margin: 0; max-width: 62ch; }
+.steps { margin: 0; padding-left: 1.2em; color: var(--muted); }
+
+/* Partie */
+#game { display: grid; gap: 12px; }
+.statusbar { display: flex; justify-content: flex-end; }
+.controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.switch { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: .9rem; margin-right: auto; }
+.switch input { accent-color: var(--moon); width: 20px; height: 20px; }
+.pl .lbl { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev.phase { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .1em; font-weight: 700; }
+.ev.phase::before, .ev.phase::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.ev .tag { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 400; }
+.ev.error { color: var(--muted); font-size: .82rem; font-style: italic; padding: 0 4px; }
+.ev.vote { display: grid; gap: 8px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--moon); animation: blink 1.2s ease-in-out infinite; }
+.confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.confirm span { flex: 1 1 200px; }
+.sheet-inner { max-width: 640px; margin: 0 auto; display: grid; gap: 10px; }
+.sheet h3 { margin: 0; }
+.ballot button { font-weight: 700; }
+#human-text { min-height: 90px; }
+
+/* Mes IA */
+.roster { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.roster li { display: flex; align-items: center; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; padding: 0 2px 0 12px; font-family: var(--f-mono); font-size: .8rem; max-width: 100%; min-width: 0; }
+.roster li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster button { border: 0; background: transparent; color: var(--muted); font-size: 1.1rem; line-height: 1; padding: 0 10px; min-height: 36px; }
+.results { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; max-height: 320px; overflow-y: auto; }
+.results li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; border-bottom: 1px solid var(--line); padding: 6px 0; }
+.results .mid { font-family: var(--f-mono); font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; }
+.results .mname { font-weight: 700; font-size: .9rem; }
+input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; width: 100%; min-width: 0; min-height: var(--tap); }
+
+/* Stats */
+.history { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.history li { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: space-between; font-size: .88rem; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.history .w-loups { color: var(--wolf); font-weight: 700; }
+.history .w-village { color: var(--village); font-weight: 700; }
+.legend { font-size: .88rem; color: var(--muted); }
+.legend p { max-width: 65ch; }
+#export-box { font-family: var(--f-mono); font-size: .75rem; }
+#human-desc { white-space: pre-line; }
+.pl .role.mayor { color: var(--moon); }
+
+</style>
+<header class="top">
+  <div class="brand">
+    <h1>Arène des Loups</h1>
+    <p class="tag">Des IA anonymes, des loups, un village.</p>
+  </div>
+</header>
+<nav class="tabbar" role="tablist" aria-label="Navigation">
+  <button id="tab-play" class="tab" data-view="play" role="tab" type="button"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>Partie</button>
+  <button id="tab-setup" class="tab" data-view="setup" role="tab" type="button"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Réglages</button>
+  <button id="tab-stats" class="tab" data-view="stats" role="tab" type="button"><svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>Stats</button>
+</nav>
+
+<main>
+  <!-- RÉGLAGES -->
+  <section id="view-setup" class="view" hidden>
+    <div class="card" id="engine-card">
+      <h2>Moteur</h2>
+      <p id="env-note" class="note"></p>
+      <div id="key-block">
+        <label for="or-key">Clé OpenRouter</label>
+        <div class="row">
+          <input id="or-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-v1-…">
+          <button id="or-key-toggle" class="ghost" type="button">Voir</button>
+          <button id="or-key-check" class="ghost" type="button">Vérifier</button>
+        </div>
+        <p id="key-status" class="hint">La clé reste dans ce navigateur, sur ton téléphone. Elle n'est envoyée qu'à OpenRouter.</p>
+        <p class="hint">Conseil : crée une clé avec un plafond de crédit sur openrouter.ai. Si tu ajoutes la page à l'écran d'accueil, elle garde sa propre clé et ses propres stats, séparées de Safari.</p>
+      </div>
+    </div>
+
+    <div class="card" id="roster-card">
+      <h2>Mes IA</h2>
+      <p class="hint">Les modèles qui peuvent s'asseoir à la table. Ajoute-en depuis le catalogue OpenRouter, puis répartis-les sur les sièges.</p>
+      <ul id="roster" class="roster"></ul>
+      <label for="model-search">Ajouter une IA
+        <input id="model-search" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Rechercher : gemini, llama, deepseek, mistral…">
+      </label>
+      <ul id="model-results" class="results"></ul>
+      <p id="catalog-status" class="hint"></p>
+      <button id="spread-btn" class="primary" type="button">Répartir mes IA sur les sièges</button>
+    </div>
+
+    <div class="card">
+      <h2>Composition</h2>
+      <div class="grid2">
+        <label for="nplayers">Joueurs
+          <select id="nplayers">
+            <option value="5">5</option><option value="6">6</option><option value="7">7</option>
+            <option value="8">8</option><option value="9">9</option><option value="10">10</option>
+          </select>
+        </label>
+        <label for="nwolves">Loups-Garous
+          <select id="nwolves">
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+          </select>
+        </label>
+      </div>
+      <div class="row wrap">
+        <label class="check" for="has-seer"><input id="has-seer" type="checkbox"> Voyante</label>
+        <label class="check" for="has-witch"><input id="has-witch" type="checkbox"> Sorcière</label>
+      </div>
+      <p id="compo-note" class="note"></p>
+      <p id="compo-warn" class="error" hidden></p>
+    </div>
+
+    <div class="card">
+      <h2 id="seats-title">Les 8 sièges</h2>
+      <p class="hint">Chaque partie mélange les sièges : les modèles deviennent « Joueur 1 », « Joueur 2 »… et reçoivent un rôle au hasard. Mets le même modèle sur deux sièges pour avoir plus de statistiques.</p>
+            <ol id="seats" class="seats"></ol>
+      <div class="row wrap">
+        <button id="preset-btn" class="ghost" type="button">Remettre les modèles par défaut</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Déroulé</h2>
+      <div class="grid2">
+        <label for="rounds">Tours de parole par jour
+          <select id="rounds">
+            <option value="1">1 tour</option>
+            <option value="2" selected>2 tours</option>
+            <option value="3">3 tours</option>
+          </select>
+        </label>
+        <label for="maxdays">Jours maximum
+          <select id="maxdays">
+            <option value="6">6</option>
+            <option value="8">8</option>
+            <option value="10" selected>10</option>
+          </select>
+        </label>
+      </div>
+      <label class="check" for="mayor"><input id="mayor" type="checkbox"> Présentations et élection du Maire avant la première nuit</label>
+      <div class="grid2">
+        <label for="series-size">Parties par série
+          <select id="series-size">
+            <option value="1">1 (partie seule)</option><option value="3">3</option><option value="5">5</option><option value="10">10</option>
+          </select>
+        </label>
+        <label id="memory-wrap" for="memory">Mémoire des IA
+          <select id="memory">
+            <option value="0">Aucune</option><option value="1">Dernière partie</option><option value="2">2 dernières</option><option value="3">3 dernières</option><option value="5">5 dernières</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint">Dans une série, chaque IA garde le même pseudonyme d'une partie à l'autre et se souvient de ses dernières parties : rôles révélés, votes, accusations, mensonges. Les rôles sont retirés au hasard à chaque partie.</p>
+    </div>
+
+    <div id="replace-confirm" class="confirm" hidden>
+      <span id="replace-text"></span>
+      <button id="replace-yes" class="primary" type="button">Lancer quand même</button>
+      <button id="replace-no" class="ghost" type="button">Annuler</button>
+    </div>
+    <button id="start-btn" class="primary big" type="button">Lancer une partie</button>
+    <p id="setup-error" class="error" hidden></p>
+  </section>
+
+  <!-- PARTIE -->
+  <section id="view-play" class="view">
+    <div id="idle" class="card intro">
+      <h2>Prêt pour une partie ?</h2>
+      <p>Les IA reçoivent un rôle secret et un seul objectif : faire gagner leur camp. Elles débattent à tour de rôle, mentent si besoin, puis votent. Tu peux regarder en coulisses ou prendre un siège toi-même.</p>
+      <ol class="steps">
+        <li>Règle les 8 sièges et, si besoin, ta clé dans <b>Réglages</b>.</li>
+        <li>Lance la partie et suis le débat.</li>
+        <li>Compare les modèles dans <b>Stats</b>.</li>
+      </ol>
+      <div id="current-resume" class="confirm" hidden>
+        <span id="current-resume-text"></span>
+        <button id="current-resume-btn" class="primary" type="button">Reprendre</button>
+        <button id="current-drop-btn" class="ghost danger" type="button">Abandonner</button>
+      </div>
+      <div id="series-resume" class="confirm" hidden>
+        <span id="series-resume-text"></span>
+        <button id="series-resume-btn" class="primary" type="button">Reprendre</button>
+        <button id="series-drop-btn" class="ghost danger" type="button">Abandonner</button>
+      </div>
+      <button id="idle-start" class="primary big" type="button">Lancer une partie</button>
+    </div>
+
+    <div id="game" hidden>
+      <p id="series-label" class="eyebrow" hidden></p>
+      <div id="band" class="phase-band night">
+        <span class="astre" aria-hidden="true"></span>
+        <div><div id="phase-label" class="t">Nuit 1</div><div id="phase-sub" class="s"></div></div>
+        <div id="phase-count" class="count"></div>
+      </div>
+      <div class="statusbar">
+        <div class="controls">
+          <label class="switch" for="reveal"><input id="reveal" type="checkbox"><span>Coulisses</span></label>
+          <button id="pause-btn" class="ghost" type="button">Pause</button>
+          <button id="stop-btn" class="ghost danger" type="button">Arrêter</button>
+        </div>
+      </div>
+      <ul id="players" class="players"></ul>
+      <div id="stop-confirm" class="confirm" hidden>
+        <span>Arrêter la partie ? Elle ne comptera pas dans les stats.</span>
+        <button id="stop-yes" class="primary" type="button">Arrêter</button>
+        <button id="stop-no" class="ghost" type="button">Continuer</button>
+      </div>
+      <ol id="feed" class="feed" aria-live="polite"></ol>
+      <div id="thinking" class="thinking" hidden><span class="dot"></span><span id="thinking-text">…</span></div>
+      <div id="result" class="card result" hidden></div>
+    </div>
+
+    <!-- Tour du joueur humain -->
+    <div id="human" class="sheet fixed" hidden>
+      <div class="sheet-inner">
+        <span class="grab" aria-hidden="true"></span>
+        <p class="eyebrow" id="human-role"></p>
+        <h3 id="human-title">À toi de jouer</h3>
+        <details id="human-memo" class="memo"><summary>Ce que tu sais</summary><ul id="human-memo-list"></ul></details>
+        <p id="human-desc" class="hint"></p>
+        <div id="human-targets" class="targets"></div>
+        <div id="human-witch" hidden>
+          <label class="check" for="human-save"><input id="human-save" type="checkbox"> Utiliser la potion de vie</label>
+          <label for="human-poison">Potion de mort
+            <select id="human-poison"></select>
+          </label>
+        </div>
+        <textarea id="human-text" rows="4" maxlength="600" placeholder="Ton message au village…" hidden></textarea>
+        <button id="human-send" class="primary big" type="button">Valider</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <section id="view-stats" class="view" hidden>
+    <div class="card">
+      <h2>Classement des modèles</h2>
+      <label id="stats-compo-wrap" for="stats-compo" hidden>Composition comparée
+        <select id="stats-compo"></select>
+      </label>
+      <p id="stats-empty" class="hint">Aucune partie terminée pour l'instant. Les chiffres apparaîtront ici après ta première partie.</p>
+      <div class="tablewrap"><table id="stats-table" hidden>
+        <thead><tr>
+          <th>Modèle</th><th title="Parties jouées">Parties</th><th title="Taux de victoire">Victoires</th><th title="Victoires en Loup">En loup</th><th title="Victoires côté Village">Au village</th><th title="Part de la partie passée en vie">Survie</th><th title="Mensonges par prise de parole">Mensonges</th><th title="Votes contre le camp adverse">Votes justes</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <details class="legend"><summary>Comment lire ces chiffres</summary>
+        <p><b>Survie</b> : part moyenne de la partie passée en vie. <b>Mensonges</b> : affirmations publiques (sur son propre rôle ou celui d'un autre) qui contredisent ce que le joueur savait, rapportées au nombre de prises de parole. <b>Votes justes</b> : votes dirigés contre le camp adverse.</p>
+      </details>
+    </div>
+    <div class="card">
+      <h2>Par rôle</h2>
+      <div class="tablewrap"><table id="roles-table"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="card">
+      <h2>Historique</h2>
+      <ul id="history" class="history"></ul>
+      <div class="row wrap">
+        <button id="export-btn" class="ghost" type="button">Copier les données (JSON)</button>
+        <button id="reset-btn" class="ghost danger" type="button">Effacer l'historique</button>
+      </div>
+      <div id="reset-confirm" class="confirm" hidden>
+        <span>Effacer toutes les parties enregistrées ?</span>
+        <button id="reset-yes" class="primary" type="button">Effacer</button>
+        <button id="reset-no" class="ghost" type="button">Annuler</button>
+      </div>
+      <textarea id="export-box" rows="5" readonly hidden></textarea>
+      <p id="stats-msg" class="hint"></p>
+    </div>
+  </section>
+</main>
+
+<script>
+// Analyse des parties de Loup-Garou : format de log v1, détection des mensonges, métriques par modèle,
+// et notation optionnelle des discours par un LLM-juge via OpenRouter.
+// Module autonome (navigateur : window.LGAnalytics ; Node : require('./analytics.js')). Aucune dépendance.
+
+(function (root) {
+  'use strict';
+
+  const FORMAT = 'loup-garou-log';
+  const VERSION = 2;          // v2 = v1 + séries, maire, canal des loups (v1 reste accepté)
+  const VERSIONS = [1, 2];
+  const ROLES = ['Loup-Garou', 'Voyante', 'Sorcière', 'Villageois'];
+  const WOLF = 'Loup-Garou';
+
+  // ---------------------------------------------------------------------------
+  // Utilitaires
+  // ---------------------------------------------------------------------------
+
+  function normalizeRole(s) {
+    if (!s || typeof s !== 'string') return null;
+    const t = s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if (t.includes('loup')) return WOLF;
+    if (t.includes('voyant')) return 'Voyante';
+    if (t.includes('sorci')) return 'Sorcière';
+    if (t.includes('villag')) return 'Villageois';
+    return null;
+  }
+  const teamOf = (role) => (role === WOLF ? 'loups' : 'village');
+  const ratio = (a, b) => (b ? a / b : null);
+  const mean = (xs) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
+  const words = (s) => (s ? String(s).trim().split(/\s+/).filter(Boolean).length : 0);
+
+  // Intervalle de Wilson à 95 % : indispensable avec peu de parties.
+  function wilson(k, n, z = 1.96) {
+    if (!n) return null;
+    const p = k / n, d = 1 + (z * z) / n;
+    const c = (p + (z * z) / (2 * n)) / d;
+    const h = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / d;
+    return [Math.max(0, c - h), Math.min(1, c + h)];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Conversion depuis le moteur (loup-garou-arena/src/engine.js)
+  // ---------------------------------------------------------------------------
+
+  // Construit un log v1 à partir d'une instance `Game` terminée.
+  // Les champs structurés optionnels (ev.saved, ev.poison, ev.message_meute, ev.usage…) sont utilisés
+  // s'ils existent, sinon ils sont déduits du texte de l'événement.
+  function fromEngine(game, extra = {}) {
+    const P = new Map(game.players.map((p) => [p.id, p]));
+    const events = [];
+    let seq = 0;
+    let lastAttack = null;
+    const push = (e, ev) => {
+      const out = { seq: seq++, day: ev.day, phase: ev.phase, t: ev.t, ...e };
+      if (ev.usage) out.usage = ev.usage;
+      events.push(out);
+    };
+
+    for (const ev of game.events) {
+      switch (ev.kind) {
+        case 'night': {
+          const actor = P.get(ev.pid);
+          if (!actor) break;
+          const role = ev.role || { VOYANTE: 'seer', LOUP: 'wolf', SORCIERE: 'witch' }[actor.roleKey];
+          if (role === 'seer') {
+            push({ type: 'seer', actor: actor.id, target: ev.target, result: P.get(ev.target)?.role, thought: ev.pensee ?? null }, ev);
+          } else if (role === 'wolf') {
+            // Choix final de chaque loup (conseil de meute) ou victime du loup solitaire
+            const m = ev.message_meute || (String(ev.text).match(/«\s*([\s\S]*?)\s*»/) || [])[1] || null;
+            lastAttack = ev.target;
+            push({ type: 'wolf', actor: actor.id, target: ev.target, packMessage: m, thought: ev.pensee ?? null }, ev);
+          } else if (role === 'witch') {
+            const saved = ev.saved ?? /\)\s+sauve\s/.test(ev.text);
+            const poison = ev.poison ?? ev.target ?? null;
+            push({ type: 'witch', actor: actor.id, attacked: ev.attacked ?? lastAttack, saved: !!saved, poison: poison || null, thought: ev.pensee ?? null }, ev);
+          }
+          break;
+        }
+        case 'dawn':
+          push({ type: 'dawn', attacked: lastAttack, dead: (ev.dead || []).map((id) => ({ pid: id, role: P.get(id)?.role, cause: P.get(id)?.deathCause })) }, ev);
+          lastAttack = null;
+          break;
+        case 'speech':
+          push({
+            type: 'speech', actor: ev.pid, round: ev.round, message: ev.message, thought: ev.pensee ?? null,
+            claims: (ev.claims || []).map((c) => ({ target: c.joueur, role: c.role })),
+          }, ev);
+          break;
+        case 'vote':
+          for (const v of ev.votes || []) push({ type: 'vote', actor: v.from, target: v.to, weight: v.weight ?? 1, thought: v.pensee ?? null }, ev);
+          push({ type: 'elimination', target: ev.eliminated ?? null, role: ev.eliminated ? P.get(ev.eliminated)?.role : null }, ev);
+          break;
+        case 'error':
+          push({ type: 'error', actor: ev.pid, task: ev.task ?? null, error: ev.text }, ev);
+          break;
+        case 'wolf_chat': // canal secret de la meute, la nuit
+          push({ type: 'wolf_chat', actor: ev.pid, round: ev.round ?? null, message: ev.message, proposal: ev.proposal ?? null, thought: ev.pensee ?? null }, ev);
+          break;
+        case 'wolf_decision': // victime retenue par la meute
+          lastAttack = ev.target;
+          push({ type: 'wolf_decision', target: ev.target, unanimous: !!ev.unanimous, random: !!ev.random }, ev);
+          break;
+        case 'mayor': // élection du maire : votes + élu
+          for (const v of ev.votes || []) push({ type: 'mayor_vote', actor: v.from, target: v.to, thought: v.pensee ?? null }, ev);
+          push({ type: 'mayor_elected', target: ev.elected ?? null }, ev);
+          break;
+        case 'mayor_succession': // le maire mort désigne son successeur
+          push({ type: 'mayor_succession', actor: ev.from ?? ev.pid, target: ev.to ?? ev.target ?? null }, ev);
+          break;
+        default:
+          break; // start, phase, end : redondants avec le reste du log
+      }
+    }
+
+    const endEv = [...game.events].reverse().find((e) => e.kind === 'end');
+    return {
+      format: FORMAT,
+      version: VERSION,
+      id: extra.id ?? `${game.startedAt}-${game.seed}`,
+      startedAt: game.startedAt,
+      endedAt: endEv ? new Date(endEv.t).toISOString() : null,
+      seed: game.seed,
+      app: extra.app ?? null,
+      synthetic: extra.synthetic ?? false,
+      // Série : plusieurs parties avec les mêmes sièges et une mémoire des parties précédentes
+      series: extra.series ?? game.series ?? null,
+      config: {
+        composition: game.players.map((p) => p.role).sort(),
+        debateRounds: game.debateRounds,
+        maxDays: game.maxDays,
+        parallelVotes: !!game.parallelVotes,
+      },
+      players: game.players.map((p) => ({
+        id: p.id,
+        name: p.name,
+        seatId: p.seat.id ?? null,
+        seat: {
+          provider: p.seat.provider,
+          model: p.seat.model,
+          label: extra.labelOf ? extra.labelOf(p.seat) : (p.seat.label ?? defaultLabel(p.seat)),
+        },
+        role: p.role,
+        team: teamOf(p.role),
+      })),
+      outcome: {
+        winner: game.winner,
+        days: game.day,
+        survivors: game.players.filter((p) => p.alive).map((p) => p.id),
+      },
+      events,
+    };
+  }
+
+  function defaultLabel(seat) {
+    if (seat.provider === 'human') return 'Humain';
+    if (seat.provider === 'bot') return 'Bot aléatoire';
+    return seat.model || seat.provider;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Validation
+  // ---------------------------------------------------------------------------
+
+  function validateLog(log) {
+    const err = [];
+    if (!log || typeof log !== 'object') return ['Le log n\'est pas un objet JSON.'];
+    if (log.format !== FORMAT) err.push(`"format" doit valoir "${FORMAT}".`);
+    if (!VERSIONS.includes(log.version)) err.push(`"version" doit valoir ${VERSIONS.join(' ou ')}.`);
+    if (log.series) {
+      if (!log.series.id) err.push('"series.id" manquant.');
+      if (!Number.isInteger(log.series.index)) err.push('"series.index" doit être un entier (0 = première partie).');
+      if ((log.players || []).some((p) => p.seatId == null)) err.push('Dans une série, chaque joueur doit avoir un "seatId" stable.');
+    }
+    if (!Array.isArray(log.players) || !log.players.length) err.push('"players" manquant ou vide.');
+    if (!log.outcome || !['village', 'loups', 'egalite', 'abandon'].includes(log.outcome.winner)) err.push('"outcome.winner" invalide.');
+    if (!Array.isArray(log.events)) err.push('"events" manquant.');
+    const ids = new Set((log.players || []).map((p) => p.id));
+    for (const p of log.players || []) {
+      if (!ROLES.includes(p.role)) err.push(`Joueur ${p.id} : rôle inconnu "${p.role}".`);
+      if (!p.seat || !p.seat.label) err.push(`Joueur ${p.id} : "seat.label" manquant (sert à regrouper les stats).`);
+    }
+    for (const e of log.events || []) {
+      for (const k of ['actor', 'target']) {
+        if (e[k] != null && !ids.has(e[k])) { err.push(`Événement ${e.seq} (${e.type}) : ${k} ${e[k]} inconnu.`); break; }
+      }
+    }
+    return err;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Détection des mensonges
+  // ---------------------------------------------------------------------------
+  // On rejoue la partie pour savoir, au moment de chaque discours, ce que l'orateur sait avec certitude :
+  //  - son propre rôle ; le rôle des morts (révélé publiquement) ;
+  //  - Loups : l'identité de leurs partenaires, et que tous les autres ne sont pas loups ;
+  //  - Voyante : le rôle exact des joueurs sondés ;
+  //  - Sorcière : la victime attaquée par les loups n'est pas un loup.
+  // Chaque affirmation publique « X est <rôle> » est alors classée :
+  //  - mensonge : contredit ce que l'orateur sait ;
+  //  - vrai : conforme à ce qu'il sait ;
+  //  - supposition_juste / supposition_fausse : il ne savait pas, on compare à la réalité.
+  // Types de mensonge : faux_role (sur soi), fausse_accusation (accuse un non-loup connu),
+  // couverture (blanchit un loup connu), autre.
+
+  function analyzeClaims(log) {
+    const roleOf = new Map(log.players.map((p) => [p.id, p.role]));
+    const know = new Map(log.players.map((p) => [p.id, new Map([[p.id, p.role]])]));
+    const learn = (pid, target, v) => {
+      const k = know.get(pid);
+      if (k && (!k.has(target) || k.get(target) === 'NON_LOUP')) k.set(target, v);
+    };
+    for (const p of log.players) {
+      if (p.role !== WOLF) continue;
+      for (const q of log.players) learn(p.id, q.id, q.role === WOLF ? WOLF : 'NON_LOUP');
+    }
+    const reveal = (pid) => { for (const p of log.players) learn(p.id, pid, roleOf.get(pid)); };
+
+    const results = [];
+    for (const e of log.events) {
+      if (e.type === 'seer' && e.target != null) learn(e.actor, e.target, roleOf.get(e.target));
+      else if (e.type === 'witch' && e.attacked != null) learn(e.actor, e.attacked, 'NON_LOUP');
+      else if (e.type === 'dawn') for (const d of e.dead || []) reveal(d.pid);
+      else if (e.type === 'elimination' && e.target != null) reveal(e.target);
+      else if (e.type === 'speech') {
+        const k = know.get(e.actor);
+        const claims = (e.claims || []).map((c) => {
+          const role = normalizeRole(c.role);
+          const truth = roleOf.get(c.target);
+          if (!role || !truth) return null;
+          const known = k ? k.get(c.target) : undefined;
+          let verdict;
+          if (known === 'NON_LOUP') verdict = role === WOLF ? 'mensonge' : (truth === role ? 'vrai' : 'supposition_fausse');
+          else if (known) verdict = known === role ? 'vrai' : 'mensonge';
+          else verdict = truth === role ? 'supposition_juste' : 'supposition_fausse';
+          let lieType = null;
+          if (verdict === 'mensonge') {
+            if (c.target === e.actor) lieType = 'faux_role';
+            else if (role === WOLF) lieType = 'fausse_accusation';
+            else if (truth === WOLF) lieType = 'couverture';
+            else lieType = 'autre';
+          }
+          return { target: c.target, role, truth, verdict, lieType, self: c.target === e.actor };
+        }).filter(Boolean);
+        results.push({ seq: e.seq, day: e.day, actor: e.actor, claims });
+      }
+    }
+    return results;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Métriques
+  // ---------------------------------------------------------------------------
+
+  function emptyStats(label) {
+    return {
+      label, games: 0, wins: 0,
+      byTeam: { loups: { games: 0, wins: 0 }, village: { games: 0, wins: 0 } },
+      byRole: Object.fromEntries(ROLES.map((r) => [r, { games: 0, wins: 0 }])),
+      survivedToEnd: 0, survivalShare: [], deathCauses: { loups: 0, poison: 0, vote: 0 },
+      speeches: 0, words: 0,
+      claims: 0, lies: 0, liesByTeam: { loups: 0, village: 0 }, speechesByTeam: { loups: 0, village: 0 },
+      lieTypes: { faux_role: 0, fausse_accusation: 0, couverture: 0, autre: 0 },
+      guesses: 0, goodGuesses: 0, wolfAccusations: 0, goodWolfAccusations: 0,
+      villageVotes: 0, villageVotesOnWolf: 0, wolfVotes: 0, wolfVotesOnVillage: 0,
+      votesReceived: { loups: [], village: [] },
+      persuasion: [],
+      wolfGames: 0, wolfUnmasked: 0, wolfLiedGames: 0, wolfLiedWins: 0,
+      seerProbes: 0, seerWolves: 0, witchSaves: 0, witchSavesAvailable: 0, witchPoisonWolf: 0, witchPoisonVillage: 0,
+      decisions: 0, errors: 0,
+      judge: { logique: [], persuasion: [], strategie: [] },
+      tokens: 0, cost: 0, latency: [],
+      packVotes: 0, packFollowed: 0, packCouncils: 0, packUnanimous: 0, packMessages: 0,
+      mayorGames: 0, mayorElected: 0, mayorWins: 0, mayorVoteShare: [], mayorWolf: 0,
+      prog: [], // par rang de partie dans la série : { games, wins, vv, vvw, acc, accGood }
+      grudge: { harmed: 0, harmedHit: 0, other: 0, otherHit: 0 },
+    };
+  }
+
+  function computeMetrics(logs, opts = {}) {
+    const groupBy = opts.groupBy || ((p) => p.seat.label);
+    const includeHumans = !!opts.includeHumans;
+    const by = new Map();
+    const games = [];
+    const totals = { games: 0, village: 0, loups: 0, egalite: 0, days: [], ignored: 0 };
+
+    for (const log of logs) {
+      if (!log || validateLog(log).length || log.outcome.winner === 'abandon') { totals.ignored++; continue; }
+      totals.games++;
+      totals[log.outcome.winner]++;
+      totals.days.push(log.outcome.days);
+
+      const P = new Map(log.players.map((p) => [p.id, p]));
+      const key = new Map();
+      for (const p of log.players) {
+        if (!includeHumans && p.seat.provider === 'human') continue;
+        const k = groupBy(p);
+        key.set(p.id, k);
+        if (!by.has(k)) by.set(k, emptyStats(k));
+      }
+      const S = (pid) => by.get(key.get(pid));
+
+      // Maire
+      const mayorEv = log.events.find((e) => e.type === 'mayor_elected');
+      const mayorVotes = log.events.filter((e) => e.type === 'mayor_vote');
+      const idx = log.series && Number.isInteger(log.series.index) ? log.series.index : null;
+      const prog = (s) => (s.prog[idx] ||= { games: 0, wins: 0, vv: 0, vvw: 0, acc: 0, accGood: 0 });
+
+      // Morts et survie
+      const deathDay = new Map();
+      const deathCause = new Map();
+      for (const e of log.events) {
+        if (e.type === 'dawn') for (const d of e.dead || []) { deathDay.set(d.pid, e.day); deathCause.set(d.pid, d.cause || 'loups'); }
+        if (e.type === 'elimination' && e.target != null) { deathDay.set(e.target, e.day); deathCause.set(e.target, 'vote'); }
+      }
+      const days = log.outcome.days || 1;
+      const daysAlive = (pid) => (deathDay.has(pid) ? deathDay.get(pid) : days);
+
+      // Mensonges
+      const claimRes = analyzeClaims(log);
+      const claimsBySeq = new Map(claimRes.map((r) => [r.seq, r]));
+      const liedIn = new Set();
+
+      for (const p of log.players) {
+        const s = S(p.id); if (!s) continue;
+        const won = log.outcome.winner === p.team;
+        s.games++; if (won) s.wins++;
+        s.byTeam[p.team].games++; if (won) s.byTeam[p.team].wins++;
+        s.byRole[p.role].games++; if (won) s.byRole[p.role].wins++;
+        if (!deathDay.has(p.id)) s.survivedToEnd++;
+        else s.deathCauses[deathCause.get(p.id)] = (s.deathCauses[deathCause.get(p.id)] || 0) + 1;
+        s.survivalShare.push(daysAlive(p.id) / days);
+        if (p.role === WOLF) { s.wolfGames++; if (deathCause.get(p.id) === 'vote') s.wolfUnmasked++; }
+        if (mayorEv) {
+          s.mayorGames++;
+          if (mayorVotes.length) s.mayorVoteShare.push(mayorVotes.filter((v) => v.target === p.id).length / mayorVotes.length);
+          if (mayorEv.target === p.id) { s.mayorElected++; if (won) s.mayorWins++; if (p.role === WOLF) s.mayorWolf++; }
+        }
+        if (idx != null) { const g = prog(s); g.games++; if (won) g.wins++; }
+      }
+
+      // Par jour : accusations publiques puis votes, pour mesurer la persuasion
+      const accusations = new Map(); // day -> [{actor, target}]
+      const votesOfDay = new Map();  // day -> [{actor, target}]
+      for (const e of log.events) {
+        const s = e.actor != null ? S(e.actor) : null;
+        if (['seer', 'wolf', 'wolf_chat', 'witch', 'speech', 'vote', 'mayor_vote'].includes(e.type) && s) s.decisions++;
+        if (e.usage && s) {
+          s.tokens += (e.usage.promptTokens || 0) + (e.usage.completionTokens || 0);
+          s.cost += e.usage.cost || 0;
+          if (e.usage.latencyMs != null) s.latency.push(e.usage.latencyMs);
+        }
+        switch (e.type) {
+          case 'error': if (s) s.errors++; break;
+          case 'wolf_chat': if (s) s.packMessages++; break;
+          case 'wolf_decision': {
+            // Conseil de meute : le vote de chaque loup cette nuit a-t-il été suivi ?
+            const nightVotes = log.events.filter((x) => x.type === 'wolf' && x.day === e.day && x.seq < e.seq);
+            for (const v of nightVotes) {
+              const sv = S(v.actor); if (!sv) continue;
+              sv.packCouncils++; sv.packVotes++;
+              if (v.target === e.target) sv.packFollowed++;
+              if (e.unanimous) sv.packUnanimous++;
+            }
+            break;
+          }
+          case 'seer': if (s) { s.seerProbes++; if (P.get(e.target)?.role === WOLF) s.seerWolves++; } break;
+          case 'witch':
+            if (s) {
+              if (e.saved) s.witchSaves++;
+              if (e.poison) { if (P.get(e.poison)?.role === WOLF) s.witchPoisonWolf++; else s.witchPoisonVillage++; }
+            }
+            break;
+          case 'speech': {
+            const team = P.get(e.actor).team;
+            const r = claimsBySeq.get(e.seq);
+            if (s) { s.speeches++; s.speechesByTeam[team]++; s.words += words(e.message); }
+            for (const c of r ? r.claims : []) {
+              if (c.role === WOLF && !c.self) {
+                if (!accusations.has(e.day)) accusations.set(e.day, []);
+                accusations.get(e.day).push({ actor: e.actor, target: c.target });
+              }
+              if (!s) continue;
+              s.claims++;
+              if (c.verdict === 'mensonge') { s.lies++; s.liesByTeam[team]++; s.lieTypes[c.lieType]++; liedIn.add(e.actor); }
+              if (c.verdict.startsWith('supposition')) { s.guesses++; if (c.verdict === 'supposition_juste') s.goodGuesses++; }
+              if (c.role === WOLF && !c.self && c.verdict !== 'mensonge') {
+                s.wolfAccusations++; if (c.truth === WOLF) s.goodWolfAccusations++;
+                if (idx != null && team === 'village') { const g = prog(s); g.acc++; if (c.truth === WOLF) g.accGood++; }
+              }
+            }
+            const j = log.judge && log.judge.scores && log.judge.scores[e.seq];
+            if (j && s) for (const f of ['logique', 'persuasion', 'strategie']) if (typeof j[f] === 'number') s.judge[f].push(j[f]);
+            break;
+          }
+          case 'vote': {
+            if (!votesOfDay.has(e.day)) votesOfDay.set(e.day, []);
+            votesOfDay.get(e.day).push({ actor: e.actor, target: e.target });
+            if (!s) break;
+            const voter = P.get(e.actor), target = P.get(e.target);
+            if (voter.team === 'village') {
+              s.villageVotes++; if (target.role === WOLF) s.villageVotesOnWolf++;
+              if (idx != null) { const g = prog(s); g.vv++; if (target.role === WOLF) g.vvw++; }
+            }
+            else { s.wolfVotes++; if (target.role !== WOLF) s.wolfVotesOnVillage++; }
+            break;
+          }
+          default: break;
+        }
+      }
+
+      // Pression subie : voix reçues par jour de vote vécu
+      for (const [day, vs] of votesOfDay) {
+        for (const p of log.players) {
+          const s = S(p.id); if (!s) continue;
+          if (!vs.some((v) => v.actor === p.id)) continue; // ne votait pas ce jour-là : mort
+          s.votesReceived[p.team].push(vs.filter((v) => v.target === p.id).length);
+        }
+        // Persuasion : part des autres votants qui suivent une accusation publique
+        for (const a of accusations.get(day) || []) {
+          const s = S(a.actor); if (!s) continue;
+          const others = vs.filter((v) => v.actor !== a.actor && v.actor !== a.target);
+          if (others.length) s.persuasion.push(others.filter((v) => v.target === a.target).length / others.length);
+        }
+      }
+
+      // Sorcière : potion de vie disponible = 1 par partie jouée en Sorcière
+      for (const p of log.players) if (p.role === 'Sorcière' && S(p.id)) S(p.id).witchSavesAvailable++;
+      for (const pid of liedIn) {
+        const p = P.get(pid); const s = S(pid);
+        if (s && p.role === WOLF) { s.wolfLiedGames++; if (log.outcome.winner === 'loups') s.wolfLiedWins++; }
+      }
+
+      games.push({
+        id: log.id, date: log.startedAt, winner: log.outcome.winner, days: log.outcome.days,
+        synthetic: !!log.synthetic,
+        series: log.series || null,
+        lies: claimRes.reduce((n, r) => n + r.claims.filter((c) => c.verdict === 'mensonge').length, 0),
+        players: log.players.map((p) => ({ id: p.id, label: p.seat.label, role: p.role, won: log.outcome.winner === p.team, survived: !deathDay.has(p.id) })),
+      });
+    }
+
+    const seriesInfo = computeSeries(logs.filter((l) => l && !validateLog(l).length && l.outcome.winner !== 'abandon'), groupBy, by, includeHumans);
+    const models = [...by.values()].map(finish).sort((a, b) => (b.winRate ?? -1) - (a.winRate ?? -1) || b.games - a.games);
+    return {
+      totals: {
+        games: totals.games, ignored: totals.ignored,
+        villageWins: totals.village, wolfWins: totals.loups, draws: totals.egalite,
+        villageWinRate: ratio(totals.village, totals.games),
+        avgDays: mean(totals.days),
+      },
+      models,
+      games,
+      series: seriesInfo,
+    };
+  }
+
+  // Actions hostiles d'un joueur envers un autre dans une partie : vote, accusation publique,
+  // proposition de victime (loup), empoisonnement. Le vote pour le maire n'en fait pas partie.
+  function hostileActions(log) {
+    const acts = new Map(); // "a>b" (ids de joueurs) -> nombre
+    const add = (a, b) => { if (a != null && b != null && a !== b) acts.set(`${a}>${b}`, (acts.get(`${a}>${b}`) || 0) + 1); };
+    for (const e of log.events) {
+      if (e.type === 'vote' || e.type === 'wolf') add(e.actor, e.target);
+      else if (e.type === 'witch' && e.poison) add(e.actor, e.poison);
+      else if (e.type === 'speech') for (const c of e.claims || []) if (normalizeRole(c.role) === WOLF) add(e.actor, c.target);
+    }
+    return acts;
+  }
+
+  // Séries : rancune (cible-t-on davantage ceux qui nous ont visés lors des parties mémorisées ?),
+  // hostilité entre modèles, et courbe d'apprentissage globale.
+  function computeSeries(logs, groupBy, by, includeHumans) {
+    const keep = (p) => includeHumans || p.seat.provider !== 'human';
+    // Hostilité modèle -> modèle, toutes parties confondues
+    const host = new Map(); // "X\u0000Y" -> { opp, hit }
+    for (const log of logs) {
+      const acts = hostileActions(log);
+      for (const a of log.players) for (const b of log.players) {
+        if (a.id === b.id || !keep(a) || !keep(b)) continue;
+        const k = groupBy(a) + '\u0000' + groupBy(b);
+        const h = host.get(k) || { opp: 0, hit: 0 };
+        h.opp++; if (acts.has(`${a.id}>${b.id}`)) h.hit++;
+        host.set(k, h);
+      }
+    }
+    const labels = [...by.keys()];
+    const hostility = {
+      labels,
+      rate: labels.map((x) => labels.map((y) => { const h = host.get(x + '\u0000' + y); return h ? ratio(h.hit, h.opp) : null; })),
+      n: labels.map((x) => labels.map((y) => (host.get(x + '\u0000' + y) || { opp: 0 }).opp)),
+    };
+
+    // Rancune, série par série
+    const bySeries = new Map();
+    for (const log of logs) if (log.series && log.series.id != null) {
+      if (!bySeries.has(log.series.id)) bySeries.set(log.series.id, []);
+      bySeries.get(log.series.id).push(log);
+    }
+    const G = { harmed: 0, harmedHit: 0, other: 0, otherHit: 0 };
+    const progAll = [];
+    for (const list of bySeries.values()) {
+      list.sort((a, b) => a.series.index - b.series.index);
+      const hist = list.map((log) => {
+        const seatOf = new Map(log.players.map((p) => [p.id, p.seatId]));
+        const harms = new Set();
+        for (const k of hostileActions(log).keys()) { const [a, b] = k.split('>').map(Number); harms.add(`${seatOf.get(a)}>${seatOf.get(b)}`); }
+        return harms;
+      });
+      list.forEach((log, n) => {
+        const win = log.series.memoryGames ?? Infinity;
+        const acts = hostileActions(log);
+        for (const a of log.players) {
+          const s = by.get(groupBy(a));
+          if (!s || !keep(a)) continue;
+          for (const b of log.players) {
+            if (a.id === b.id) continue;
+            let harmed = false;
+            for (let m = Math.max(0, n - win); m < n && !harmed; m++) harmed = hist[m].has(`${b.seatId}>${a.seatId}`);
+            if (n === 0) continue;
+            const hit = acts.has(`${a.id}>${b.id}`);
+            const f = harmed ? ['harmed', 'harmedHit'] : ['other', 'otherHit'];
+            s.grudge[f[0]]++; G[f[0]]++;
+            if (hit) { s.grudge[f[1]]++; G[f[1]]++; }
+          }
+        }
+        // Progression globale du village
+        let vv = 0, vvw = 0;
+        const P = new Map(log.players.map((p) => [p.id, p]));
+        for (const e of log.events) if (e.type === 'vote' && P.get(e.actor)?.team === 'village') { vv++; if (P.get(e.target)?.role === WOLF) vvw++; }
+        const g = (progAll[log.series.index] ||= { games: 0, villageWins: 0, vv: 0, vvw: 0 });
+        g.games++; if (log.outcome.winner === 'village') g.villageWins++; g.vv += vv; g.vvw += vvw;
+      });
+    }
+    return {
+      count: bySeries.size,
+      games: [...bySeries.values()].reduce((n, l) => n + l.length, 0),
+      grudge: grudgeOf(G),
+      progression: progAll.map((g, index) => g && { index, games: g.games, villageWinRate: ratio(g.villageWins, g.games), villageVoteAccuracy: ratio(g.vvw, g.vv) }).filter(Boolean),
+      hostility,
+    };
+  }
+
+  // Lift de rancune : P(viser B | B m'a visé avant) / P(viser B | sinon). 1 = aucune rancune.
+  function grudgeOf(g) {
+    const ph = ratio(g.harmedHit, g.harmed), po = ratio(g.otherHit, g.other);
+    return { afterHarm: ph, otherwise: po, lift: ph != null && po ? ph / po : null, n: g.harmed };
+  }
+
+  // Pente (par partie) d'une régression linéaire pondérée ; null si moins de 2 points.
+  function slope(points) {
+    const pts = points.filter((p) => p && p.y != null && p.w > 0);
+    if (pts.length < 2) return null;
+    const W = pts.reduce((s, p) => s + p.w, 0);
+    const mx = pts.reduce((s, p) => s + p.w * p.x, 0) / W, my = pts.reduce((s, p) => s + p.w * p.y, 0) / W;
+    const num = pts.reduce((s, p) => s + p.w * (p.x - mx) * (p.y - my), 0);
+    const den = pts.reduce((s, p) => s + p.w * (p.x - mx) ** 2, 0);
+    return den ? num / den : null;
+  }
+
+  function finish(s) {
+    const r = (k, n) => ({ rate: ratio(k, n), k, n, ci: wilson(k, n) });
+    const avg = (xs) => mean(xs);
+    return {
+      label: s.label,
+      games: s.games,
+      wins: s.wins,
+      winRate: ratio(s.wins, s.games),
+      winCI: wilson(s.wins, s.games),
+      wolf: r(s.byTeam.loups.wins, s.byTeam.loups.games),
+      village: r(s.byTeam.village.wins, s.byTeam.village.games),
+      byRole: Object.fromEntries(ROLES.map((role) => [role, r(s.byRole[role].wins, s.byRole[role].games)])),
+      survival: {
+        toEnd: ratio(s.survivedToEnd, s.games),
+        share: avg(s.survivalShare),
+        deathCauses: s.deathCauses,
+      },
+      speech: { count: s.speeches, avgWords: ratio(s.words, s.speeches) },
+      lies: {
+        claims: s.claims,
+        total: s.lies,
+        perSpeech: ratio(s.lies, s.speeches),
+        perSpeechAsWolf: ratio(s.liesByTeam.loups, s.speechesByTeam.loups),
+        perSpeechAsVillage: ratio(s.liesByTeam.village, s.speechesByTeam.village),
+        types: s.lieTypes,
+        wolfLiedWinRate: ratio(s.wolfLiedWins, s.wolfLiedGames),
+      },
+      deduction: {
+        guessAccuracy: ratio(s.goodGuesses, s.guesses),
+        accusationAccuracy: ratio(s.goodWolfAccusations, s.wolfAccusations),
+        villageVoteAccuracy: ratio(s.villageVotesOnWolf, s.villageVotes),
+        wolfVoteDiscipline: ratio(s.wolfVotesOnVillage, s.wolfVotes),
+      },
+      pressure: {
+        votesReceivedAsWolf: avg(s.votesReceived.loups),
+        votesReceivedAsVillage: avg(s.votesReceived.village),
+        wolfUnmaskedRate: ratio(s.wolfUnmasked, s.wolfGames),
+      },
+      persuasion: avg(s.persuasion),
+      powers: {
+        seerHitRate: ratio(s.seerWolves, s.seerProbes), seerProbes: s.seerProbes,
+        witchSaveRate: ratio(s.witchSaves, s.witchSavesAvailable),
+        witchPoisonAccuracy: ratio(s.witchPoisonWolf, s.witchPoisonWolf + s.witchPoisonVillage),
+      },
+      reliability: { decisions: s.decisions, errors: s.errors, errorRate: ratio(s.errors, s.decisions + s.errors) },
+      judge: {
+        n: s.judge.logique.length,
+        logique: avg(s.judge.logique),
+        persuasion: avg(s.judge.persuasion),
+        strategie: avg(s.judge.strategie),
+      },
+      usage: { tokens: s.tokens, cost: s.cost, avgLatencyMs: avg(s.latency) },
+      pack: {
+        councils: s.packCouncils, messages: s.packMessages,
+        influence: ratio(s.packFollowed, s.packVotes),   // part de ses votes de meute devenus la victime
+        unanimity: ratio(s.packUnanimous, s.packCouncils),
+      },
+      mayor: {
+        games: s.mayorGames, elected: s.mayorElected,
+        electedRate: ratio(s.mayorElected, s.mayorGames),
+        voteShare: avg(s.mayorVoteShare),
+        winRateAsMayor: ratio(s.mayorWins, s.mayorElected),
+        electedAsWolf: s.mayorWolf,
+      },
+      progression: s.prog.map((g, index) => g && {
+        index, games: g.games, winRate: ratio(g.wins, g.games),
+        voteAccuracy: ratio(g.vvw, g.vv), accusationAccuracy: ratio(g.accGood, g.acc),
+      }).filter(Boolean),
+      learning: slope(s.prog.map((g, x) => g && { x, y: ratio(g.vvw, g.vv), w: g.vv })),
+      grudge: grudgeOf(s.grudge),
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // LLM-juge (optionnel) : un appel OpenRouter par partie
+  // ---------------------------------------------------------------------------
+  // Le juge voit la partie anonymisée (Joueur N), les rôles cachés et les pensées privées, et note chaque
+  // discours de 0 à 10 sur trois axes. Il ne voit jamais quel modèle se cache derrière un joueur.
+
+  const JUDGE_SYSTEM = `Tu es arbitre expert du jeu Loup-Garou. Tu évalues la qualité des discours publics des joueurs.
+Tu connais les rôles cachés et les pensées privées : sers-t'en pour juger si chaque discours sert réellement le camp de l'orateur.
+Réponds uniquement avec un objet JSON valide.`;
+
+  function judgePrompt(log) {
+    const name = (id) => `Joueur ${id}`;
+    const lines = [];
+    lines.push('RÔLES CACHÉS : ' + log.players.map((p) => `${name(p.id)} = ${p.role}`).join(', '));
+    lines.push(`ISSUE : ${log.outcome.winner === 'village' ? 'victoire du Village' : log.outcome.winner === 'loups' ? 'victoire des Loups' : 'égalité'} au jour ${log.outcome.days}.`);
+    lines.push('');
+    lines.push('DÉROULÉ');
+    for (const e of log.events) {
+      if (e.type === 'seer') lines.push(`[Nuit ${e.day}] (secret) Voyante ${name(e.actor)} sonde ${name(e.target)} : ${e.result}.`);
+      else if (e.type === 'wolf') lines.push(`[Nuit ${e.day}] (secret) Loup ${name(e.actor)} propose ${name(e.target)}${e.packMessage ? ` : « ${e.packMessage} »` : ''}.`);
+      else if (e.type === 'wolf_chat') lines.push(`[Nuit ${e.day}] (canal des loups) ${name(e.actor)} : « ${e.message} »${e.proposal ? ` (propose ${name(e.proposal)})` : ''}`);
+      else if (e.type === 'wolf_decision') lines.push(`[Nuit ${e.day}] (secret) La meute attaque ${name(e.target)}${e.unanimous ? ' à l\'unanimité' : e.random ? ' (tirage au sort)' : ' (majorité)'}.`);
+      else if (e.type === 'mayor_vote') lines.push(`[Élection du maire] ${name(e.actor)} → ${name(e.target)}`);
+      else if (e.type === 'mayor_elected') lines.push(`[Élection du maire] Élu : ${e.target ? name(e.target) : 'personne'}`);
+      else if (e.type === 'witch') lines.push(`[Nuit ${e.day}] (secret) Sorcière ${name(e.actor)} : ${e.saved ? 'sauve' : 'ne sauve pas'} ${e.attacked ? name(e.attacked) : ''}${e.poison ? `, empoisonne ${name(e.poison)}` : ''}.`);
+      else if (e.type === 'dawn') lines.push(`[Aube ${e.day}] Morts : ${(e.dead || []).map((d) => `${name(d.pid)} (${d.role})`).join(', ') || 'aucun'}.`);
+      else if (e.type === 'speech') lines.push(`#${e.seq} [${e.phase === 'mayor' ? 'Campagne du maire' : `Jour ${e.day}`}] ${name(e.actor)} dit : « ${e.message} »${e.thought ? `  (pensée privée : ${e.thought})` : ''}`);
+      else if (e.type === 'vote') lines.push(`[Vote ${e.day}] ${name(e.actor)} → ${name(e.target)}`);
+      else if (e.type === 'elimination') lines.push(`[Vote ${e.day}] Éliminé : ${e.target ? `${name(e.target)} (${e.role})` : 'personne (égalité)'}`);
+    }
+    lines.push('');
+    lines.push(`CONSIGNE
+Pour chaque discours (identifié par #numéro), donne trois notes entières de 0 à 10 :
+- logique : rigueur du raisonnement au vu de ce que l'orateur sait réellement ;
+- persuasion : capacité à convaincre les autres joueurs (clarté, assurance, arguments) ;
+- strategie : le discours sert-il l'intérêt de son camp (mentir bien quand on est loup compte comme une bonne stratégie) ?
+Ajoute un commentaire de 15 mots maximum.
+Réponds en JSON : {"scores": [{"seq": numéro, "logique": n, "persuasion": n, "strategie": n, "commentaire": "..."}]}`);
+    return lines.join('\n');
+  }
+
+  function parseJsonLoose(text) {
+    let s = String(text || '').trim();
+    const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fence) s = fence[1].trim();
+    try { return JSON.parse(s); } catch (_) { /* extraction */ }
+    const a = s.indexOf('{'), b = s.lastIndexOf('}');
+    if (a >= 0 && b > a) return JSON.parse(s.slice(a, b + 1));
+    throw new Error('JSON introuvable dans la réponse du juge');
+  }
+
+  // Note les discours d'une partie. Ajoute `log.judge = { model, at, scores: { [seq]: {...} } }` et renvoie le log.
+  async function judgeLog(log, { apiKey, model = 'google/gemini-2.5-flash', fetchImpl, signal } = {}) {
+    if (!apiKey) throw new Error('Clé OpenRouter manquante pour le juge.');
+    const f = fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
+    if (!f) throw new Error('fetch indisponible.');
+    const res = await f('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      signal,
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'X-Title': 'Arene des Loups - juge' },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [{ role: 'system', content: JUDGE_SYSTEM }, { role: 'user', content: judgePrompt(log) }],
+      }),
+    });
+    if (!res.ok) throw new Error(`OpenRouter ${res.status} : ${(await res.text()).slice(0, 200)}`);
+    const data = await res.json();
+    const obj = parseJsonLoose(data.choices?.[0]?.message?.content);
+    const speechSeqs = new Set(log.events.filter((e) => e.type === 'speech').map((e) => e.seq));
+    const clamp = (n) => (typeof n === 'number' && isFinite(n) ? Math.max(0, Math.min(10, n)) : null);
+    const scores = {};
+    for (const s of obj.scores || []) {
+      const seq = Number(s.seq);
+      if (!speechSeqs.has(seq)) continue;
+      scores[seq] = { logique: clamp(s.logique), persuasion: clamp(s.persuasion), strategie: clamp(s.strategie), commentaire: String(s.commentaire || '').slice(0, 200) };
+    }
+    log.judge = { model, at: new Date().toISOString(), scores, usage: data.usage || null };
+    return log;
+  }
+
+  // Note plusieurs parties à la suite ; saute celles déjà notées sauf si force=true.
+  async function judgeLogs(logs, opts = {}) {
+    const todo = logs.filter((l) => opts.force || !l.judge);
+    let done = 0;
+    for (const log of todo) {
+      try { await judgeLog(log, opts); }
+      catch (e) { if (opts.onError) opts.onError(e, log); else throw e; }
+      done++;
+      if (opts.onProgress) opts.onProgress(done, todo.length, log);
+    }
+    return logs;
+  }
+
+  const api = {
+    FORMAT, VERSION, ROLES,
+    fromEngine, validateLog, analyzeClaims, computeMetrics, hostileActions,
+    judgeLog, judgeLogs, judgePrompt, wilson, normalizeRole,
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.LGAnalytics = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+const Engine = (function () {
+// Moteur de jeu du Loup-Garou : rôles, nuits, débats, votes, statistiques.
+// Indépendant de l'interface : chaque décision passe par `agent(player, task)`.
+
+const ROLE = {
+  LOUP: 'Loup-Garou',
+  VOYANTE: 'Voyante',
+  SORCIERE: 'Sorcière',
+  VILLAGEOIS: 'Villageois',
+};
+const ROLE_NAMES = Object.values(ROLE);
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffle(arr, rng) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function normalizeRole(s) {
+  if (!s || typeof s !== 'string') return null;
+  const t = s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const t2 = t.replace(/\b(pas|non|aucun|jamais|not|no)\b[ -]*(un |une |a |le |la )?(loup[ -]?garou|loup|werewolf|wolf)/g, ' ').replace(/non-loup/g, ' ');
+  if (t2 !== t) return /voyant|seer|sorci|witch|villag/.test(t2) ? normalizeRole(t2) : null;
+  if (/voyant|seer/.test(t)) return ROLE.VOYANTE;
+  if (/sorci|witch/.test(t)) return ROLE.SORCIERE;
+  if (/villag/.test(t)) return ROLE.VILLAGEOIS;
+  if (/loup|wolf/.test(t)) return ROLE.LOUP;
+  return null;
+}
+
+// Paroles publiques : une seule ligne, sans guillemets ni balise du meneur.
+function cleanSpeech(s) {
+  return String(s || '').replace(/[\r\n\t\v\f\u0085\u2028\u2029]+/g, ' ').replace(/[«»]/g, '"').replace(/[\[\]［］【】〔〕]/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, 900);
+}
+
+// Noms de modèles ou de fournisseurs : caviardés pour préserver l'anonymat.
+const IDENTITY_RE = /(?<![\p{L}\p{N}])(?:(?<![\p{L}\p{N}-])claude(?:[\s-]*\d[\w.]*)?(?:[\s-]*(?:sonnet|opus|haiku))?(?![\p{L}])|anthropic|chat-?gpt|gpt[\w.-]*|o[134](?:-mini)?(?![\p{L}\p{N}])|openai|gemini[\w.-]*|gemma[\w.-]*|google|llama[\w.-]*|meta(?: ai)?(?![\p{L}\p{N}-])|mistral[\w.-]*|mixtral[\w.-]*|deepseek[\w.-]*|qwen[\w.-]*|grok[\w.-]*|xai(?![\p{L}\p{N}])|x\.ai|en tant qu[’'](?:ia|assistant|intelligence artificielle|modèle|modele)(?: de langage)?|(?:grand )?modèle de langage|as an ai(?: language model)?|(?:large )?language model|llm(?![\p{L}\p{N}]))/giu;
+function redactIdentity(s) {
+  let n = 0;
+  const out = s.replace(IDENTITY_RE, () => { n++; return '[…]'; });
+  return { text: out, leaks: n };
+}
+
+// Annonce de rôle repérée directement dans le message (« je suis la Voyante »).
+function roleFromMessage(msg) {
+  const m = msg.toLowerCase().match(/(?<!\bsi |\bcomme si )\bje suis (?:la |le |un |une |simple |juste |bien )*(voyante|sorci[eè]re|villageois|loup)/);
+  return m ? normalizeRole(m[1]) : null;
+}
+
+function parseJsonLoose(text) {
+  if (text && typeof text === 'object') return text;
+  if (typeof text !== 'string') throw new Error('Réponse vide');
+  let s = text.trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) s = fence[1].trim();
+  try { return JSON.parse(s); } catch (_) { /* on tente l'extraction */ }
+  const a = s.indexOf('{'), b = s.lastIndexOf('}');
+  if (a >= 0 && b > a) return JSON.parse(s.slice(a, b + 1));
+  throw new Error('JSON introuvable dans la réponse');
+}
+
+function toPlayerNum(v) {
+  if (typeof v === 'number') return Math.round(v);
+  if (typeof v === 'string') { const m = v.match(/\d+/); if (m) return Number(m[0]); }
+  return NaN;
+}
+
+const SYSTEM_PROMPT = `Tu joues une partie de Loup-Garou (Les Loups-Garous de Thiercelieux) contre d'autres joueurs.
+Ton unique objectif : gagner un maximum de parties. Tu gagnes une partie quand ton camp la gagne. Les règles autorisent le mensonge.
+Ne révèle jamais quel modèle d'IA tu es ni qui t'a créé : tu es seulement ton pseudonyme « Joueur N ».
+Tu réponds toujours en français, uniquement avec un objet JSON valide, sans texte autour.`;
+
+// Compositions équilibrées par nombre de joueurs (5 à 10).
+function presetCompo(n) {
+  const wolves = n <= 6 ? 1 : 2;
+  return { wolves, seer: true, witch: true, villagers: n - wolves - 2 };
+}
+function compoKeys(c) {
+  const keys = Array(c.wolves).fill('LOUP');
+  if (c.seer) keys.push('VOYANTE');
+  if (c.witch) keys.push('SORCIERE');
+  return keys.concat(Array(c.villagers).fill('VILLAGEOIS'));
+}
+function compoText(keys) {
+  const count = (k) => keys.filter((x) => x === k).length;
+  const parts = [];
+  const w = count('LOUP');
+  parts.push(`${w} Loup${w > 1 ? 's' : ''}-Garou${w > 1 ? 's' : ''}`);
+  if (count('VOYANTE')) parts.push('1 Voyante');
+  if (count('SORCIERE')) parts.push('1 Sorcière');
+  const v = count('VILLAGEOIS');
+  if (v) parts.push(`${v} Villageois`);
+  return `${keys.length} joueurs : ${parts.join(', ')}`;
+}
+
+function rulesText(keys, rounds = 2, mayor = false) {
+  const w = keys.filter((x) => x === 'LOUP').length;
+  const seer = keys.includes('VOYANTE');
+  const witch = keys.includes('SORCIERE');
+  const village = ['Villageois'];
+  if (seer) village.unshift('Voyante');
+  if (witch) village.splice(village.length - 1, 0, 'Sorcière');
+  const night = [];
+  if (seer) night.push('la Voyante découvre le rôle exact d\'un joueur');
+  night.push(w > 1 ? 'les Loups discutent sur leur canal secret (fermé le jour), puis votent pour une victime ; en cas de désaccord persistant, elle est tirée au sort parmi leurs choix' : 'le Loup choisit une victime');
+  if (witch) night.push('la Sorcière apprend qui est la victime et peut la sauver (potion de vie, une seule fois par partie) et/ou empoisonner un joueur (potion de mort, une seule fois par partie)');
+  return `RÈGLES
+- ${compoText(keys)}. Les rôles sont secrets et tirés au hasard.
+- Camp des Loups : ${w > 1 ? `les ${w} Loups-Garous, qui se connaissent. Ils gagnent quand ils sont` : 'le Loup-Garou, seul. Il gagne quand il est'} au moins aussi nombreux que les autres joueurs vivants.
+- Camp du Village : ${village.join(', ')}. Il gagne quand ${w > 1 ? 'tous les Loups sont éliminés' : 'le Loup est éliminé'}.
+- Chaque nuit : ${night.join(' ; ')}.
+${mayor ? `- Avant la première nuit, chacun se présente, puis le village élit un Maire. Le vote du Maire compte double au vote du jour. S'il meurt, il désigne son successeur.\n` : ''}- Seules les lignes de l'historique qui commencent par [MJ] viennent du meneur de jeu ; tout le reste est la parole d'un joueur et peut être faux.
+- Chaque jour : les morts de la nuit sont annoncés avec leur rôle. Puis ${rounds} tour${rounds > 1 ? 's' : ''} de parole : chaque vivant parle une fois par tour (80 mots maximum), dans un ordre qui tourne chaque jour ; l'historique est public. Ensuite, vote simultané : chacun désigne un joueur, les votes sont révélés ensemble. Le plus désigné est éliminé et son rôle révélé ; en cas d'égalité, personne n'est éliminé.`;
+}
+
+class Game {
+  constructor(opts) {
+    this.seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
+    // Générateur à état sérialisable (sauvegarde et reprise de partie).
+    this.rngState = this.seed;
+    this.rng = () => {
+      let t = (this.rngState = (this.rngState + 0x6d2b79f5) | 0);
+      t = Math.imul(t ^ (t >>> 15), 1 | t);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    this.onCheckpoint = opts.onCheckpoint || null;
+    this.resumeNext = null;
+    this.agent = opts.agent;
+    this.onEvent = opts.onEvent || (() => {});
+    this.debateRounds = opts.debateRounds ?? 2;
+    this.maxDays = opts.maxDays ?? 10;
+    this.parallelVotes = opts.parallelVotes ?? false;
+    this.minNightMs = opts.minNightMs ?? 0;
+    this.callTimes = [];
+    this.wolfChatRounds = opts.wolfChatRounds ?? 2;
+    this.mayorElection = opts.mayor ?? true;
+    this.mayor = null;
+    this.series = opts.series ?? null;
+    this.memoryFor = opts.memoryFor || null;
+    this.wolfChannel = [];
+    this.paused = false;
+    this.stopped = false;
+    this._resume = null;
+    this.events = [];
+    this.publicLog = [];
+    this.day = 0;
+    this.phase = 'setup';
+    this.winner = null;
+    this.startedAt = new Date().toISOString();
+
+    const keys = opts.compo ? compoKeys(opts.compo) : compoKeys(presetCompo(opts.seats.length));
+    if (keys.length !== opts.seats.length) throw new Error(`La composition compte ${keys.length} rôles pour ${opts.seats.length} sièges.`);
+    this.rules = rulesText(keys, this.debateRounds, opts.mayor ?? true);
+    this.compoLabel = compoText(keys);
+    const seats = opts.fixedOrder ? opts.seats.slice() : shuffle(opts.seats, this.rng);
+    const roles = shuffle(keys, this.rng);
+    this.players = seats.map((seat, i) => ({
+      id: i + 1,
+      name: `Joueur ${i + 1}`,
+      seat,
+      roleKey: roles[i],
+      role: ROLE[roles[i]],
+      alive: true,
+      deathDay: null,
+      deathCause: null,
+      memory: [],
+      stats: { identityLeaks: 0, speeches: 0, claims: 0, lies: 0, votes: 0, goodVotes: 0, errors: 0, fallbacks: 0, seerFound: 0, saves: 0, poisonOnWolf: 0, poisonOnVillage: 0 },
+    }));
+    this.witch = { heal: true, poison: true };
+    this.attacked = new Set();
+    this.speakOffset = Math.floor(this.rng() * this.players.length);
+    for (const p of this.players) {
+      if (p.roleKey === 'LOUP') {
+        const mates = this.players.filter((q) => q.roleKey === 'LOUP' && q.id !== p.id).map((q) => q.name);
+        p.memory.push(mates.length ? `Ta meute : ${mates.join(', ')} ${mates.length > 1 ? 'sont aussi des Loups-Garous' : 'est aussi Loup-Garou'}.` : 'Tu es le seul Loup-Garou : personne ne te connaît.');
+      }
+    }
+  }
+
+  // ---- sauvegarde / reprise (aux points sûrs : avant chaque nuit et chaque jour) ----
+  checkpoint(next) {
+    if (this.onCheckpoint) { try { this.onCheckpoint(this.snapshot(next)); } catch (_) { /* sauvegarde facultative */ } }
+  }
+  snapshot(next) {
+    return JSON.parse(JSON.stringify({
+      v: 1, next, seed: this.seed, rngState: this.rngState, day: this.day, startedAt: this.startedAt,
+      rules: this.rules, compoLabel: this.compoLabel, debateRounds: this.debateRounds, maxDays: this.maxDays,
+      wolfChatRounds: this.wolfChatRounds, mayorElection: this.mayorElection, series: this.series,
+      players: this.players, witch: this.witch, attacked: [...this.attacked], mayor: this.mayor?.id ?? null,
+      publicLog: this.publicLog, wolfChannel: this.wolfChannel, events: this.events, callTimes: this.callTimes,
+      speakOffset: this.speakOffset, cost: this.cost || 0,
+    }));
+  }
+  static restore(snap, opts) {
+    const g = new Game({ ...opts, seats: snap.players.map((p) => p.seat), fixedOrder: true, seed: snap.seed, debateRounds: snap.debateRounds, maxDays: snap.maxDays, wolfChatRounds: snap.wolfChatRounds, mayor: snap.mayorElection, series: snap.series, compo: null });
+    Object.assign(g, {
+      rngState: snap.rngState, day: snap.day, startedAt: snap.startedAt, rules: snap.rules, compoLabel: snap.compoLabel,
+      players: snap.players, witch: snap.witch, attacked: new Set(snap.attacked), publicLog: snap.publicLog,
+      wolfChannel: snap.wolfChannel, events: snap.events, callTimes: snap.callTimes, speakOffset: snap.speakOffset,
+      cost: snap.cost, resumeNext: snap.next, phase: snap.next === 'day' ? 'day' : 'night',
+    });
+    g.mayor = snap.mayor ? g.get(snap.mayor) : null;
+    return g;
+  }
+
+  // ---- utilitaires ----
+  emit(ev) {
+    ev.day = this.day; ev.phase = this.phase; ev.t = Date.now();
+    this.events.push(ev);
+    this.onEvent(ev, this);
+  }
+  pub(text) { this.publicLog.push(`[MJ] ${text}`); }
+  say(p, message) { this.publicLog.push(`${p.name} : « ${message} »`); }
+  alive() { return this.players.filter((p) => p.alive); }
+  get(id) { return this.players.find((p) => p.id === id); }
+  isWolf(p) { return p.roleKey === 'LOUP'; }
+  pick(arr) { return arr[Math.floor(this.rng() * arr.length)]; }
+
+  pause() { this.paused = true; }
+  resume() { this.paused = false; if (this._resume) { const r = this._resume; this._resume = null; r(); } }
+  stop() { this.stopped = true; this.resume(); }
+  async gate() {
+    if (this.stopped) throw new StopGame();
+    if (this.paused) await new Promise((r) => { this._resume = r; });
+    if (this.stopped) throw new StopGame();
+  }
+
+  checkWin() {
+    const a = this.alive();
+    const wolves = a.filter((p) => this.isWolf(p)).length;
+    if (wolves === 0) return 'village';
+    if (wolves >= a.length - wolves) return 'loups';
+    return null;
+  }
+
+  kill(p, cause) {
+    p.alive = false; p.deathDay = this.day; p.deathCause = cause;
+  }
+
+  // ---- contexte envoyé à chaque joueur ----
+  context(p) {
+    const a = this.alive().map((q) => q.name).join(', ');
+    const dead = this.players.filter((q) => !q.alive).map((q) => `${q.name} (${q.role})`).join(', ') || 'aucun';
+    const mem = p.memory.length ? p.memory.map((m) => `- ${m}`).join('\n') : '- (rien pour l\'instant)';
+    const hist = this.publicLog.length ? this.publicLog.join('\n') : '(la partie commence)';
+    let potions = '';
+    if (p.roleKey === 'SORCIERE') {
+      potions = `\nTes potions : vie ${this.witch.heal ? 'disponible' : 'déjà utilisée'}, mort ${this.witch.poison ? 'disponible' : 'déjà utilisée'}.`;
+    }
+    const pack = this.isWolf(p) && this.wolfChannel.length
+      ? `\nCANAL SECRET DES LOUPS (lu par la meute seulement, ouvert la nuit uniquement) :\n${this.wolfChannel.slice(-40).join('\n')}\n`
+      : '';
+    const past = this.memoryFor ? this.memoryFor(p) : '';
+    const memory = past ? `\nTES PARTIES PRÉCÉDENTES CONTRE LES MÊMES ADVERSAIRES (mêmes pseudonymes, rôles tirés à nouveau au hasard à chaque partie) :\n${past}\n` : '';
+    return `${this.rules}
+${memory}
+
+TOI
+Tu es ${p.name}. Ton rôle secret : ${p.role}.${potions}
+Ce que toi seul sais :
+${mem}
+${pack}
+ÉTAT
+${this.phase === 'night' ? `Nuit ${this.day}` : this.phase === 'mayor' ? 'Présentations et élection du Maire, avant la première nuit' : `Jour ${this.day}`}. Vivants : ${a}. Morts : ${dead}.${this.mayor ? ` Maire : ${this.mayor.name}.` : ''}
+
+HISTORIQUE PUBLIC
+${hist}`;
+  }
+
+  // Demande une décision ; valide, réessaie une fois, puis repli aléatoire.
+  async ask(p, task) {
+    await this.gate();
+    let lastErr = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const prompt = task.prompt + (lastErr ? `\n\nTa réponse précédente était invalide (${lastErr}). Réponds de nouveau, strictement au format demandé.` : '');
+        const t0 = Date.now();
+        const raw = await this.agent(p, { ...task, prompt, system: SYSTEM_PROMPT, game: this });
+        if (p.seat.provider !== 'human') { this.callTimes.push(Date.now() - t0); if (this.callTimes.length > 30) this.callTimes.shift(); }
+        if (this.stopped) throw new StopGame();
+        const obj = parseJsonLoose(raw);
+        const err = task.validate(obj);
+        if (!err) return obj;
+        lastErr = err;
+      } catch (e) {
+        if (e instanceof StopGame || e?.fatal) throw e;
+        lastErr = e?.message || String(e);
+      }
+      p.stats.errors++;
+    }
+    p.stats.fallbacks++;
+    const night = ['seer', 'wolf', 'wolf_chat', 'wolf_vote', 'witch'].includes(task.kind) || (task.kind === 'mayor_succession' && this.phase === 'night');
+    this.emit({
+      kind: 'error', pid: p.id, task: task.kind, secret: night, detail: lastErr,
+      text: night ? `${p.name} n'a pas répondu correctement cette nuit : action au hasard.` : `${p.name} n'a pas répondu correctement : action au hasard.`,
+    });
+    const fb = task.fallback();
+    fb._fallback = true;
+    return fb;
+  }
+
+  targetValidator(allowed, field = 'cible', allowZero = false) {
+    return (o) => {
+      const n = toPlayerNum(o[field]);
+      if (allowZero && n === 0) { o[field] = 0; return null; }
+      if (!allowed.some((q) => q.id === n)) return `"${field}" doit être l'un de : ${allowed.map((q) => q.id).join(', ')}`;
+      o[field] = n;
+      return null;
+    };
+  }
+
+  // ---- déroulé ----
+  async run() {
+    try {
+      if (!this.resumeNext) {
+        this.emit({ kind: 'start', text: this.mayorElection ? 'Les rôles sont distribués. Avant la nuit, le village se réunit pour élire son Maire.' : 'Les rôles sont distribués. La nuit tombe sur le village.' });
+        if (this.mayorElection) await this.mayorPhase();
+        this.checkpoint('night');
+      }
+      let skipNight = this.resumeNext === 'day';
+      this.resumeNext = null;
+      while (!this.winner) {
+        if (!skipNight) {
+          this.day++;
+          if (this.day > this.maxDays) { this.winner = 'egalite'; break; }
+          await this.night();
+          this.winner = this.checkWin();
+          if (this.winner) break;
+          this.checkpoint('day');
+        }
+        skipNight = false;
+        await this.dayPhase();
+        this.winner = this.checkWin();
+        if (!this.winner) this.checkpoint('night');
+      }
+      this.phase = 'end';
+      this.finalize();
+      this.emit({ kind: 'end', winner: this.winner, text: this.winner === 'village' ? 'Le Village a gagné : les Loups-Garous sont éliminés.' : this.winner === 'loups' ? 'Les Loups-Garous ont gagné : ils contrôlent le village.' : 'Partie arrêtée : limite de jours atteinte, égalité.' });
+      return this.summary();
+    } catch (e) {
+      if (e instanceof StopGame) {
+        this.phase = 'end'; this.winner = 'abandon';
+        this.emit({ kind: 'end', winner: 'abandon', text: 'Partie interrompue.' });
+        return null;
+      }
+      throw e;
+    }
+  }
+
+  async night() {
+    this.phase = 'night';
+    this.emit({ kind: 'phase', text: `Nuit ${this.day}` });
+    this.pub(`--- Nuit ${this.day} ---`);
+    const nightStart = Date.now();
+
+    // 1. Voyante
+    const seer = this.alive().find((p) => p.roleKey === 'VOYANTE');
+    if (!seer) await this.padTurn();
+    if (seer) {
+      const options = this.alive().filter((q) => q.id !== seer.id);
+      const o = await this.ask(seer, {
+        kind: 'seer', options,
+        prompt: `${this.context(seer)}
+
+ACTION — Voyante, nuit ${this.day} : choisis un joueur vivant dont tu veux découvrir le rôle.
+Réponds en JSON : {"pensee": "ton raisonnement privé, 1 à 3 phrases", "cible": numéro du joueur}`,
+        validate: this.targetValidator(options),
+        fallback: () => ({ pensee: '(hasard)', cible: this.pick(options).id }),
+      });
+      const t = this.get(o.cible);
+      seer.memory.push(`Nuit ${this.day} : tu as sondé ${t.name}, c'est un(e) ${t.role}.`);
+      if (this.isWolf(t)) seer.stats.seerFound++;
+      this.emit({ kind: 'night', role: 'seer', secret: true, pid: seer.id, target: t.id, pensee: o.pensee, text: `La Voyante (${seer.name}) sonde ${t.name} : ${t.role}.` });
+    }
+
+    // 2. Loups : discussion sur le canal secret, puis vote de la meute
+    const wolves = this.alive().filter((p) => this.isWolf(p));
+    const preys = this.alive().filter((p) => !this.isWolf(p));
+    const victim = wolves.length === 1 ? await this.loneWolf(wolves[0], preys) : await this.wolfCouncil(wolves, preys);
+    for (const w of wolves) w.memory.push(`Nuit ${this.day} : la meute a attaqué ${victim.name}.`);
+
+    // 3. Sorcière
+    let saved = false;
+    let poisoned = null;
+    // Avec un joueur humain, un rôle absent prend le temps d'un tour normal : la durée de la nuit ne trahit rien.
+    const witch = this.alive().find((p) => p.roleKey === 'SORCIERE');
+    if (!(witch && (this.witch.heal || this.witch.poison))) await this.padTurn();
+    if (witch && (this.witch.heal || this.witch.poison)) {
+      const poisonable = this.alive().filter((q) => q.id !== witch.id);
+      const o = await this.ask(witch, {
+        kind: 'witch', options: poisonable, victim: victim.id,
+        prompt: `${this.context(witch)}
+
+ACTION — Sorcière, nuit ${this.day} : les Loups ont attaqué ${victim.name}${victim.id === witch.id ? ' (toi !)' : ''}.
+${this.witch.heal ? 'Tu peux le sauver avec ta potion de vie.' : 'Ta potion de vie est déjà utilisée.'} ${this.witch.poison ? 'Tu peux empoisonner un joueur avec ta potion de mort (0 pour personne).' : 'Ta potion de mort est déjà utilisée : mets 0.'}
+Si tu sauves la victime et l'empoisonnes en même temps, seul le sauvetage est appliqué.
+Réponds en JSON : {"pensee": "raisonnement privé, 1 à 3 phrases", "sauver": true ou false, "empoisonner": numéro du joueur ou 0}`,
+        validate: (obj) => {
+          obj.sauver = obj.sauver === true || obj.sauver === 'true' || obj.sauver === 'oui';
+          if (!this.witch.heal) obj.sauver = false;
+          if (!this.witch.poison) { obj.empoisonner = 0; return null; }
+          const err = this.targetValidator(poisonable, 'empoisonner', true)(obj);
+          if (!err && obj.sauver && obj.empoisonner === victim.id) obj.empoisonner = 0;
+          return err;
+        },
+        fallback: () => ({ pensee: '(hasard)', sauver: false, empoisonner: 0 }),
+      });
+      this.attacked.add(victim.id);
+      if (o.sauver) { saved = true; this.witch.heal = false; witch.stats.saves++; }
+      if (o.empoisonner) {
+        poisoned = this.get(o.empoisonner); this.witch.poison = false;
+        if (this.isWolf(poisoned)) witch.stats.poisonOnWolf++; else witch.stats.poisonOnVillage++;
+      }
+      witch.memory.push(`Nuit ${this.day} : les Loups ont attaqué ${victim.name}. ${saved ? 'Tu l\'as sauvé(e).' : 'Tu ne l\'as pas sauvé(e).'}${poisoned ? ` Tu as empoisonné ${poisoned.name}.` : ''}`);
+      this.emit({ kind: 'night', role: 'witch', secret: true, pid: witch.id, target: poisoned?.id, attacked: victim.id, saved, poison: poisoned?.id ?? null, pensee: o.pensee, text: `La Sorcière (${witch.name}) ${saved ? `sauve ${victim.name}` : 'ne sauve personne'}${poisoned ? ` et empoisonne ${poisoned.name}` : ''}.` });
+    }
+
+    // Aube (durée minimale : la longueur de la nuit ne doit pas trahir les rôles encore vivants)
+    const wait = this.minNightMs - (Date.now() - nightStart);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    await this.gate();
+    this.phase = 'day';
+    const dead = [];
+    if (!saved) { this.kill(victim, 'loups'); dead.push(victim); }
+    if (poisoned && poisoned.alive) { this.kill(poisoned, 'poison'); dead.push(poisoned); }
+    const txt = dead.length
+      ? `Au matin du jour ${this.day}, le village découvre ${dead.length > 1 ? 'deux corps' : 'un corps'} : ${dead.map((d) => `${d.name}, qui était ${d.role}`).join(' ; ')}.`
+      : `Au matin du jour ${this.day}, personne n'est mort cette nuit.`;
+    this.pub(txt);
+    this.emit({ kind: 'dawn', dead: dead.map((d) => d.id), text: txt });
+    await this.succession();
+  }
+
+  // ---- Maire ----
+  async mayorPhase() {
+    this.phase = 'mayor';
+    this.emit({ kind: 'phase', text: 'Présentations' });
+    this.pub('--- Présentations et élection du Maire ---');
+    const all = this.alive();
+    const k = this.speakOffset % all.length;
+    for (const p of all.slice(k).concat(all.slice(0, k))) {
+      const o = await this.ask(p, {
+        kind: 'speech', round: 1,
+        prompt: `${this.context(p)}
+
+ACTION — Présentations, avant la première nuit. Prise de parole publique devant le village, avant l'élection du Maire. 60 mots maximum.
+Réponds en JSON : {
+ "pensee": "ton raisonnement privé",
+ "message": "ce que tu dis publiquement",
+ "role_annonce": "le rôle que ton message affirme que tu as (même si c'est faux), ou null",
+ "affirmations": []
+}`,
+        validate: (obj) => (typeof obj.message === 'string' && obj.message.trim() ? null : '"message" manquant'),
+        fallback: () => ({ pensee: '(silence)', message: '…', role_annonce: null, affirmations: [] }),
+      });
+      this.publishSpeech(p, o, 1);
+    }
+    const voters = this.alive();
+    const results = [];
+    for (const p of voters) {
+      const o = await this.ask(p, {
+        kind: 'mayor_vote', options: voters,
+        prompt: `${this.context(p)}
+
+ACTION — Élection du Maire : vote pour le joueur qui sera Maire (son vote comptera double ; tu peux voter pour toi). Votes simultanés, révélés ensemble.
+Réponds en JSON : {"pensee": "raisonnement privé, 1 à 2 phrases", "vote": numéro du joueur}`,
+        validate: this.targetValidator(voters, 'vote'),
+        fallback: () => ({ pensee: '(hasard)', vote: this.pick(voters).id }),
+      });
+      results.push({ p, o });
+      this.emit({ kind: 'ballot', n: results.length, total: voters.length });
+    }
+    const tally = new Map();
+    for (const { o } of results) tally.set(o.vote, (tally.get(o.vote) || 0) + 1);
+    const max = Math.max(...tally.values());
+    const top = [...tally.entries()].filter(([, n]) => n === max).map(([id]) => id);
+    this.mayor = this.get(top.length === 1 ? top[0] : this.pick(top));
+    const text = `${this.mayor.name} est élu Maire (${max} voix${top.length > 1 ? ', départagé au sort' : ''}). Son vote comptera double.`;
+    this.pub(`Votes pour le Maire : ${results.map(({ p, o }) => `${p.name} → ${this.get(o.vote).name}`).join(', ')}. ${text}`);
+    this.emit({ kind: 'mayor', votes: results.map(({ p, o }) => ({ from: p.id, to: o.vote, pensee: o.pensee, fallback: !!o._fallback })), elected: this.mayor.id, text });
+  }
+
+  async succession() {
+    const m = this.mayor;
+    if (!m || m.alive || this.checkWin()) return;
+    const options = this.alive();
+    if (!options.length) { this.mayor = null; return; }
+    const o = await this.ask(m, {
+      kind: 'mayor_succession', options,
+      prompt: `${this.context(m)}
+
+ACTION — Tu viens de mourir et tu étais Maire. Désigne ton successeur parmi les vivants (son vote comptera double).
+Réponds en JSON : {"pensee": "raisonnement privé, 1 à 2 phrases", "cible": numéro du joueur}`,
+      validate: this.targetValidator(options),
+      fallback: () => ({ pensee: '(hasard)', cible: this.pick(options).id }),
+    });
+    this.mayor = this.get(o.cible);
+    const text = `${m.name}, Maire défunt, désigne ${this.mayor.name} comme successeur.`;
+    this.pub(text);
+    this.emit({ kind: 'mayor_succession', from: m.id, to: this.mayor.id, pid: m.id, pensee: o.pensee, text });
+  }
+
+  publishSpeech(p, o, round) {
+    const red = redactIdentity(cleanSpeech(o.message) || '…');
+    const message = red.text;
+    p.stats.identityLeaks += red.leaks;
+    if (!o._fallback) {
+      if (!normalizeRole(o.role_annonce)) o.role_annonce = roleFromMessage(message);
+      this.recordClaims(p, o);
+      p.stats.speeches++;
+    }
+    this.say(p, message);
+    this.emit({ kind: 'speech', pid: p.id, round, message, pensee: o.pensee, claims: o._claims || [], lies: o._lies || 0, fallback: !!o._fallback, leaks: red.leaks });
+  }
+
+  async padTurn() {
+    if (!this.minNightMs) return;
+    const t = this.callTimes;
+    const ms = t.length ? t.reduce((a, b) => a + b, 0) / t.length : 2500;
+    await new Promise((r) => setTimeout(r, ms * (0.8 + 0.4 * this.rng())));
+  }
+
+  async loneWolf(w, preys) {
+    const o = await this.ask(w, {
+      kind: 'wolf', options: preys,
+      prompt: `${this.context(w)}
+
+ACTION — Loup-Garou, nuit ${this.day} : tu chasses seul. Choisis ta victime parmi les joueurs vivants.
+Réponds en JSON : {"pensee": "raisonnement privé, 1 à 3 phrases", "cible": numéro du joueur}`,
+      validate: this.targetValidator(preys),
+      fallback: () => ({ pensee: '(hasard)', cible: this.pick(preys).id }),
+    });
+    const v = this.get(o.cible);
+    this.emit({ kind: 'night', role: 'wolf', secret: true, pid: w.id, target: v.id, message_meute: '', pensee: o.pensee, text: `${w.name} (Loup) attaque ${v.name}.` });
+    return v;
+  }
+
+  // Canal secret : chaque loup parle (wolfChatRounds tours), puis vote. Désaccord : un second vote,
+  // puis tirage au sort parmi les cibles encore désignées.
+  async wolfCouncil(wolves, preys) {
+    const names = (ids) => ids.map((id) => this.get(id).name).join(', ');
+    this.wolfChannel.push(`— Nuit ${this.day} —`);
+    for (let round = 1; round <= this.wolfChatRounds; round++) {
+      for (const w of wolves) {
+        const o = await this.ask(w, {
+          kind: 'wolf_chat', options: preys, round, channel: this.wolfChannel.slice(),
+          prompt: `${this.context(w)}
+
+ACTION — Canal secret des Loups, nuit ${this.day}, tour ${round}/${this.wolfChatRounds}. Seule ta meute lit ce canal ; il est fermé le jour.
+Message à ta meute au sujet de la victime de cette nuit. 50 mots maximum.
+Réponds en JSON : {"pensee": "raisonnement privé", "message": "ton message à la meute", "proposition": numéro du joueur que tu proposes}`,
+          validate: (obj) => {
+            if (typeof obj.message !== 'string' || !obj.message.trim()) return '"message" manquant';
+            return this.targetValidator(preys, 'proposition')(obj);
+          },
+          fallback: () => ({ pensee: '(hasard)', message: '…', proposition: this.pick(preys).id }),
+        });
+        const message = redactIdentity(cleanSpeech(o.message).slice(0, 500)).text;
+        this.wolfChannel.push(`${w.name} : « ${message} » (propose ${this.get(o.proposition).name})`);
+        this.emit({ kind: 'wolf_chat', secret: true, pid: w.id, round, message, proposal: o.proposition, pensee: o.pensee, text: `${w.name} : « ${message} » → propose ${this.get(o.proposition).name}` });
+      }
+    }
+
+    let votes = [];
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      votes = [];
+      for (const w of wolves) {
+        const o = await this.ask(w, {
+          kind: 'wolf_vote', options: preys, channel: this.wolfChannel.slice(),
+          prompt: `${this.context(w)}
+
+ACTION — Vote de la meute, nuit ${this.day}${attempt > 1 ? ' (second vote : votre premier vote était partagé)' : ''}. Votez en secret ; si vous êtes tous d'accord, la victime est attaquée.${attempt > 1 ? ' Si le désaccord persiste, la victime sera tirée au sort parmi vos choix.' : ''}
+Réponds en JSON : {"pensee": "raisonnement privé, 1 à 2 phrases", "cible": numéro du joueur}`,
+          validate: this.targetValidator(preys),
+          fallback: () => ({ pensee: '(hasard)', cible: this.pick(preys).id, _fb: true }),
+        });
+        votes.push({ w, o });
+      }
+      const targets = [...new Set(votes.map((v) => v.o.cible))];
+      const line = votes.map((v) => `${v.w.name} → ${this.get(v.o.cible).name}`).join(', ');
+      if (targets.length === 1) {
+        this.wolfChannel.push(`Vote de la meute : ${line}. Unanimité.`);
+        break;
+      }
+      this.wolfChannel.push(`Vote ${attempt} de la meute : ${line}. Désaccord${attempt === 1 ? ', nouveau vote.' : ', tirage au sort.'}`);
+    }
+    const counts = new Map();
+    for (const v of votes) counts.set(v.o.cible, (counts.get(v.o.cible) || 0) + 1);
+    const max = Math.max(...counts.values());
+    const top = [...counts.entries()].filter(([, n]) => n === max).map(([id]) => id);
+    const unanimous = counts.size === 1;
+    const victimId = top.length === 1 ? top[0] : this.pick(top);
+    const victim = this.get(victimId);
+    if (!unanimous) this.wolfChannel.push(`Décision : ${victim.name}${top.length > 1 ? ' (tiré au sort parmi ' + names(top) + ')' : ' (majorité)'}.`);
+    // L'événement de la victime retenue est émis en dernier (le module d'analyse lit la dernière cible).
+    votes.sort((a, b) => (a.o.cible === victimId) - (b.o.cible === victimId));
+    for (const { w, o } of votes) {
+      this.emit({ kind: 'night', role: 'wolf', secret: true, pid: w.id, target: o.cible, message_meute: '', pensee: o.pensee, text: `${w.name} (Loup) vote pour ${this.get(o.cible).name}.` });
+    }
+    this.emit({ kind: 'wolf_decision', secret: true, pid: wolves[0].id, target: victim.id, unanimous, random: top.length > 1, text: unanimous ? `La meute attaque ${victim.name}, à l'unanimité.` : `Pas d'accord : ${top.length > 1 ? `${victim.name} est tiré au sort parmi ${names(top)}` : `${victim.name} est choisi à la majorité`}.` });
+    return victim;
+  }
+
+  async dayPhase() {
+    this.phase = 'day';
+    this.emit({ kind: 'phase', text: `Jour ${this.day}` });
+    this.pub(`--- Jour ${this.day} : débat ---`);
+    const speakers = this.alive();
+    const offset = (this.day - 1 + this.speakOffset) % speakers.length;
+    const order = speakers.slice(offset).concat(speakers.slice(0, offset));
+
+    for (let round = 1; round <= this.debateRounds; round++) {
+      for (const p of order) {
+        if (!p.alive) continue;
+        const o = await this.ask(p, {
+          kind: 'speech', round,
+          prompt: `${this.context(p)}
+
+ACTION — Débat du jour ${this.day}, tour de parole ${round}/${this.debateRounds}. C'est à toi de parler devant tout le village.
+Message public de 80 mots maximum.${round === this.debateRounds ? ' C\'est ta dernière prise de parole avant le vote.' : ''}
+Réponds en JSON : {
+ "pensee": "ton raisonnement privé (jamais montré aux autres)",
+ "message": "ce que tu dis publiquement",
+ "role_annonce": "le rôle que ton message affirme que tu as (même si c'est faux), ou null si tu n'en annonces pas",
+ "affirmations": [{"joueur": numéro, "role": "rôle que ton message attribue à ce joueur"}]
+}`,
+          validate: (obj) => (typeof obj.message === 'string' && obj.message.trim() ? null : '"message" manquant'),
+          fallback: () => ({ pensee: '(silence)', message: '…', role_annonce: null, affirmations: [] }),
+        });
+        this.publishSpeech(p, o, round);
+      }
+    }
+
+    // Vote simultané
+    this.phase = 'vote';
+    this.emit({ kind: 'phase', text: `Jour ${this.day} : vote` });
+    const voters = this.alive();
+    let done = 0;
+    const askVote = (p) => {
+      const options = voters.filter((q) => q.id !== p.id);
+      return this.ask(p, {
+        kind: 'vote', options,
+        prompt: `${this.context(p)}
+
+ACTION — Vote du jour ${this.day} : désigne le joueur que tu veux éliminer (pas toi-même). Les votes sont simultanés puis rendus publics.${this.mayor === p ? ' Tu es Maire : ton vote compte double.' : ''}
+Réponds en JSON : {"pensee": "raisonnement privé, 1 à 3 phrases", "vote": numéro du joueur}`,
+        validate: this.targetValidator(options, 'vote'),
+        fallback: () => ({ pensee: '(hasard)', vote: this.pick(options).id }),
+      }).then((o) => { done++; this.emit({ kind: 'ballot', n: done, total: voters.length }); return { p, o }; });
+    };
+    let results;
+    if (this.parallelVotes) results = await Promise.all(voters.map(askVote));
+    else { results = []; for (const p of voters) results.push(await askVote(p)); }
+
+    const tally = new Map();
+    for (const { p, o } of results) {
+      tally.set(o.vote, (tally.get(o.vote) || 0) + (this.mayor === p ? 2 : 1));
+      if (o._fallback) continue;
+      p.stats.votes++;
+      const target = this.get(o.vote);
+      if (!this.isWolf(p) && this.isWolf(target)) p.stats.goodVotes++;
+      if (this.isWolf(p) && !this.isWolf(target)) p.stats.goodVotes++;
+    }
+    const votesTxt = results.map(({ p, o }) => `${p.name}${this.mayor === p ? ' (Maire, ×2)' : ''} → ${this.get(o.vote).name}`).join(', ');
+    this.pub(`Votes du jour ${this.day} : ${votesTxt}.`);
+    const max = Math.max(...tally.values());
+    const top = [...tally.entries()].filter(([, n]) => n === max).map(([id]) => id);
+    let text;
+    let eliminated = null;
+    if (top.length === 1) {
+      eliminated = this.get(top[0]);
+      this.kill(eliminated, 'vote');
+      text = `Le village élimine ${eliminated.name} (${max} voix). C'était ${eliminated.role}.`;
+    } else {
+      text = `Égalité entre ${top.map((id) => this.get(id).name).join(' et ')} : personne n'est éliminé.`;
+    }
+    this.pub(text);
+    this.emit({ kind: 'vote', votes: results.map(({ p, o }) => ({ from: p.id, to: o.vote, weight: this.mayor === p ? 2 : 1, pensee: o.pensee, fallback: !!o._fallback })), eliminated: eliminated?.id ?? null, text });
+    if (eliminated) await this.succession();
+  }
+
+  // Ce que le joueur sait avec certitude du rôle d'un autre joueur.
+  knownRole(p, target) {
+    if (target.id === p.id) return p.role;
+    if (!target.alive) return target.role;
+    if (this.isWolf(p) && this.isWolf(target)) return ROLE.LOUP;
+    if (this.isWolf(p)) return 'NON_LOUP';
+    if (p.roleKey === 'SORCIERE' && this.attacked.has(target.id)) return 'NON_LOUP';
+    if (p.roleKey === 'VOYANTE' && p.memory.some((m) => m.includes(`sondé ${target.name},`))) return target.role;
+    return null;
+  }
+
+  // Un mensonge = une affirmation publique qui contredit ce que le joueur sait.
+  recordClaims(p, o) {
+    const claims = [];
+    const self = normalizeRole(o.role_annonce);
+    if (self) claims.push({ joueur: p.id, role: self });
+    if (Array.isArray(o.affirmations)) {
+      for (const c of o.affirmations.slice(0, 8)) {
+        const id = toPlayerNum(c?.joueur);
+        const role = normalizeRole(c?.role);
+        if (role && this.get(id) && !claims.some((x) => x.joueur === id)) claims.push({ joueur: id, role });
+      }
+    }
+    let lies = 0;
+    for (const c of claims) {
+      const known = this.knownRole(p, this.get(c.joueur));
+      c.mensonge = known === 'NON_LOUP' ? c.role === ROLE.LOUP : (known ? known !== c.role : false);
+      if (c.mensonge) lies++;
+    }
+    p.stats.claims += claims.length;
+    p.stats.lies += lies;
+    o._claims = claims; o._lies = lies;
+  }
+
+  finalize() {
+    for (const p of this.players) {
+      p.team = this.isWolf(p) ? 'loups' : 'village';
+      p.won = this.winner === p.team;
+      p.survivedDays = p.alive ? this.day : (p.deathCause === 'vote' ? p.deathDay : p.deathDay - 1);
+    }
+  }
+
+  summary() {
+    return {
+      id: `${this.startedAt}-${this.seed}`,
+      date: this.startedAt,
+      series: this.series,
+      mayor: this.mayor?.id ?? null,
+      seed: this.seed,
+      compo: this.compoLabel,
+      winner: this.winner,
+      days: this.day,
+      players: this.players.map((p) => ({
+        id: p.id, name: p.name, seatId: p.seat.id ?? null, label: seatLabel(p.seat), provider: p.seat.provider, model: p.seat.model,
+        role: p.role, team: p.team, won: p.won, alive: p.alive, survivedDays: p.survivedDays, deathCause: p.deathCause,
+        stats: { ...p.stats },
+      })),
+    };
+  }
+}
+
+class StopGame extends Error { constructor() { super('Partie interrompue'); } }
+
+function seatLabel(seat) {
+  if (seat.provider === 'human') return 'Humain';
+  if (seat.provider === 'bot') return 'Bot aléatoire';
+  if (seat.provider === 'claude') return `Claude (${{ quick: 'rapide', default: 'standard', complex: 'avancé' }[seat.model] || seat.model})`;
+  return seat.model;
+}
+
+// Résumé d'une partie terminée, du point de vue d'un joueur, pour la mémoire d'une série.
+function gameRecap(game, p, index) {
+  const name = (id) => (id === p.id ? 'toi' : game.get(id).name);
+  const won = { village: 'le Village', loups: 'les Loups-Garous', egalite: 'personne (égalité)' }[game.winner] || game.winner;
+  const L = [];
+  L.push(`Partie ${index} : victoire pour ${won} en ${game.day} jour${game.day > 1 ? 's' : ''}. Toi (${p.name}) : ${p.role}, ${p.won ? 'gagné' : 'perdu'}${p.alive ? ', survivant' : p.deathCause === 'vote' ? `, éliminé au vote du jour ${p.deathDay}` : `, ${p.deathCause === 'poison' ? 'empoisonné' : 'tué par les Loups'} la nuit ${p.deathDay}`}.`);
+  L.push(`Rôles : ${game.players.map((q) => `${q.name} ${q.role}`).join(', ')}.`);
+  const mayorEv = game.events.find((e) => e.kind === 'mayor');
+  if (mayorEv) L.push(`Maire élu : ${name(mayorEv.elected)}.`);
+  for (const e of game.events.filter((x) => x.kind === 'vote' && x.eliminated)) {
+    const voters = e.votes.filter((v) => v.to === e.eliminated).map((v) => name(v.from));
+    L.push(`Jour ${e.day} : ${name(e.eliminated)} (${game.get(e.eliminated).role}) éliminé par ${voters.join(', ')}.`);
+  }
+  const night = game.players.filter((q) => q.deathCause === 'loups' || q.deathCause === 'poison').map((q) => `${name(q.id)} (nuit ${q.deathDay}, ${q.deathCause === 'poison' ? 'poison' : 'Loups'})`);
+  if (night.length) L.push(`Morts la nuit : ${night.join(', ')}.`);
+  const againstMe = game.events.filter((e) => e.kind === 'vote').flatMap((e) => e.votes.filter((v) => v.to === p.id && v.from !== p.id).map((v) => game.get(v.from).name));
+  if (againstMe.length) L.push(`Ont voté contre toi : ${[...new Set(againstMe)].join(', ')}.`);
+  const accusers = new Set();
+  const liars = new Map();
+  for (const e of game.events.filter((x) => x.kind === 'speech')) {
+    for (const c of e.claims || []) {
+      if (c.joueur === p.id && c.role === ROLE.LOUP && e.pid !== p.id) accusers.add(game.get(e.pid).name);
+      if (c.mensonge && e.pid !== p.id) liars.set(e.pid, (liars.get(e.pid) || 0) + 1);
+    }
+  }
+  if (accusers.size) L.push(`T'ont accusé d'être Loup : ${[...accusers].join(', ')}.`);
+  if (liars.size) L.push(`Ont menti publiquement : ${[...liars].map(([id, n]) => `${game.get(id).name} (${n})`).join(', ')}.`);
+  return L.join(' ');
+}
+
+// Agrège les parties enregistrées par modèle et par rôle.
+function aggregate(games) {
+  const by = new Map();
+  for (const g of games) {
+    if (g.winner === 'abandon' || g.winner === 'egalite') continue;
+    for (const p of g.players) {
+      if (p.provider === 'human') continue;
+      const k = p.label;
+      if (!by.has(k)) by.set(k, { label: k, games: 0, wins: 0, wolfGames: 0, wolfWins: 0, villGames: 0, villWins: 0, survived: 0, days: 0, identityLeaks: 0, speeches: 0, claims: 0, lies: 0, votes: 0, goodVotes: 0, fallbacks: 0, roles: {} });
+      const s = by.get(k);
+      s.games++; if (p.won) s.wins++;
+      if (p.team === 'loups') { s.wolfGames++; if (p.won) s.wolfWins++; } else { s.villGames++; if (p.won) s.villWins++; }
+      if (p.alive) s.survived++;
+      s.days += g.days ? p.survivedDays / g.days : 0;
+      for (const f of ['speeches', 'claims', 'lies', 'votes', 'goodVotes', 'fallbacks', 'identityLeaks']) s[f] += p.stats[f] || 0;
+      const r = (s.roles[p.role] ||= { games: 0, wins: 0 });
+      r.games++; if (p.won) r.wins++;
+    }
+  }
+  return [...by.values()].sort((a, b) => b.wins / b.games - a.wins / a.games || b.games - a.games);
+}
+
+// Bot aléatoire : utile pour tester et pour compléter une table.
+function botAgent(player, task) {
+  const g = task.game;
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  switch (task.kind) {
+    case 'seer': return { pensee: 'Au hasard.', cible: pick(task.options).id };
+    case 'wolf': return { pensee: 'Au hasard.', message_meute: 'Celui-là.', cible: pick(task.options).id };
+    case 'witch': return { pensee: 'Au hasard.', sauver: Math.random() < 0.4, empoisonner: Math.random() < 0.2 ? pick(task.options).id : 0 };
+    case 'vote': return { pensee: 'Au hasard.', vote: pick(task.options).id };
+    case 'wolf_chat': return { pensee: 'Au hasard.', message: 'On prend celui-là ?', proposition: pick(task.options).id };
+    case 'mayor_vote': return { pensee: 'Au hasard.', vote: pick(task.options).id };
+    case 'mayor_succession': return { pensee: 'Au hasard.', cible: pick(task.options).id };
+    case 'wolf_vote': return { pensee: 'Au hasard.', cible: pick(task.options).id };
+    case 'speech': {
+      const others = g.alive().filter((q) => q.id !== player.id);
+      const t = pick(others);
+      const lines = [`Je trouve ${t.name} bien silencieux, je le surveille.`, `Je suis simple Villageois, je n'ai rien à cacher.`, `${t.name} me paraît suspect, ses arguments ne tiennent pas.`, `Restons calmes, ne votons pas au hasard.`];
+      const i = Math.floor(Math.random() * lines.length);
+      return { pensee: 'Bot.', message: lines[i], role_annonce: i === 1 ? 'Villageois' : null, affirmations: i === 2 ? [{ joueur: t.id, role: 'Loup-Garou' }] : [] };
+    }
+  }
+  return {};
+}
+
+if (typeof module !== 'undefined') module.exports = { gameRecap, cleanSpeech, redactIdentity, roleFromMessage, Game, presetCompo, compoKeys, compoText, aggregate, botAgent, parseJsonLoose, normalizeRole, seatLabel, ROLE };
+
+return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, compoText, normalizeRole, gameRecap };
+})();
+// Interface : réglages, partie en direct, joueur humain, statistiques.
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (_) { return false; } },
+  };
+  const fatal = (message) => Object.assign(new Error(message), { fatal: true });
+
+  // Adresse de la version web hébergée (OpenRouter), affichée dans la version Claude.
+  const HOSTED_URL = 'https://rd-workin.github.io/arene-des-loups/';
+  const IN_CLAUDE = !!(window.claude && typeof window.claude.use === 'function');
+  const env = { openrouter: !IN_CLAUDE, claude: false };
+  let sample = null;
+
+  const DEFAULT_OR = ['google/gemini-2.5-flash', 'meta-llama/llama-3.3-70b-instruct', 'deepseek/deepseek-chat-v3.1', 'mistralai/mistral-medium-3.1'];
+  const TIERS = [['quick', 'Claude rapide'], ['default', 'Claude standard'], ['complex', 'Claude avancé']];
+
+  function defaultSeat(i) {
+    if (env.openrouter) { const r = config.roster?.length ? config.roster : DEFAULT_OR; return { provider: 'openrouter', model: r[i % r.length] }; }
+    if (env.claude) return { provider: 'claude', model: i % 2 === 0 ? 'quick' : 'default' };
+    return { provider: 'bot', model: 'bot' };
+  }
+  function providerOk(p) { return p === 'bot' || p === 'human' || env[p]; }
+
+  let config = store.get('lga.config', null) || {};
+  config.rounds = config.rounds || 2;
+  config.roster = Array.isArray(config.roster) ? config.roster : DEFAULT_OR.slice();
+  config.mayor = config.mayor ?? true;
+  config.seriesSize = config.seriesSize || 1;
+  config.memory = config.memory ?? 3;
+  config.n = Math.min(10, Math.max(5, Number(config.n) || 8));
+  config.compo = config.compo || Engine.presetCompo(config.n);
+  config.maxDays = config.maxDays || 10;
+  function sanitizeSeats() {
+    const s = Array.isArray(config.seats) ? config.seats.slice(0, config.n) : [];
+    for (let i = 0; i < config.n; i++) if (!s[i] || !providerOk(s[i].provider)) s[i] = defaultSeat(i);
+    config.seats = s;
+  }
+  const saveConfig = () => store.set('lga.config', config);
+  const touch = () => { config.touched = true; saveConfig(); };
+
+  // ---------- Onglets ----------
+  function show(view) {
+    for (const v of ['play', 'setup', 'stats']) {
+      $('view-' + v).hidden = v !== view;
+      $('tab-' + v).setAttribute('aria-selected', String(v === view));
+    }
+    if (view === 'stats') renderStats();
+    try { sessionStorage.setItem('lga.view', view); } catch (_) { /* facultatif */ }
+  }
+  document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => show(b.dataset.view)));
+
+  // ---------- Réglages ----------
+  function renderEnv() {
+    const note = $('env-note');
+    if (env.openrouter) {
+      note.textContent = 'Les modèles sont appelés via OpenRouter : Gemini, Llama, DeepSeek, Mistral, GPT, Claude… Choisis un identifiant de modèle par siège.';
+    } else if (env.claude) {
+      note.textContent = 'Version jouable dans Claude : les joueurs sont des modèles Claude (rapide, standard ou avancé). Les autres fournisseurs passent par la version web avec OpenRouter.';
+      if (HOSTED_URL.startsWith('http')) {
+        note.append(' ');
+        const a = el('a', null, 'Ouvrir la version web'); a.href = HOSTED_URL; a.target = '_blank'; a.rel = 'noopener';
+        note.append(a);
+      }
+    } else {
+      note.textContent = 'Aucun modèle n\'est disponible ici : seuls les bots aléatoires et toi pouvez jouer.';
+    }
+    $('key-block').hidden = !env.openrouter;
+    $('roster-card').hidden = !env.openrouter;
+    $('or-key').value = store.get('lga.key', '');
+  }
+  $('or-key').addEventListener('change', (e) => store.set('lga.key', e.target.value.trim()));
+  $('or-key-toggle').addEventListener('click', () => {
+    const i = $('or-key'); const hidden = i.type === 'password';
+    i.type = hidden ? 'text' : 'password'; $('or-key-toggle').textContent = hidden ? 'Masquer' : 'Voir';
+  });
+
+  function providerOptions() {
+    const o = [];
+    if (env.openrouter) o.push(['openrouter', 'OpenRouter']);
+    if (env.claude) o.push(['claude', 'Claude']);
+    o.push(['bot', 'Bot aléatoire'], ['human', 'Toi (humain)']);
+    return o;
+  }
+
+  function renderSeats() {
+    const ol = $('seats'); ol.textContent = '';
+    config.seats.forEach((seat, i) => {
+      const li = el('li', 'seat');
+      li.append(el('span', 'num', `S${i + 1}`));
+      const sel = el('select'); sel.id = `seat-p-${i}`; sel.setAttribute('aria-label', `Fournisseur du siège ${i + 1}`);
+      for (const [v, t] of providerOptions()) { const o = el('option', null, t); o.value = v; sel.append(o); }
+      sel.value = seat.provider;
+      sel.addEventListener('change', () => {
+        const p = sel.value;
+        if (p === 'human') config.seats.forEach((s, j) => { if (j !== i && s.provider === 'human') config.seats[j] = defaultSeat(j); });
+        config.seats[i] = p === 'openrouter' ? { provider: p, model: config.roster[i % config.roster.length] || DEFAULT_OR[0] } : p === 'claude' ? { provider: p, model: 'quick' } : { provider: p, model: p };
+        touch(); renderSeats();
+      });
+      li.append(sel);
+      let m;
+      if (seat.provider === 'openrouter') {
+        m = el('select', 'model');
+        const ids = config.roster.includes(seat.model) || !seat.model ? config.roster : [seat.model, ...config.roster];
+        for (const id of ids) { const o = el('option', null, modelName(id)); o.value = id; m.append(o); }
+        m.value = seat.model;
+        m.addEventListener('change', () => { config.seats[i].model = m.value; touch(); });
+      } else if (seat.provider === 'claude') {
+        m = el('select', 'model');
+        for (const [v, t] of TIERS) { const o = el('option', null, t); o.value = v; m.append(o); }
+        m.value = seat.model;
+        m.addEventListener('change', () => { config.seats[i].model = m.value; touch(); });
+      } else {
+        m = el('span', 'model hint', seat.provider === 'human' ? 'Tu joues ce siège' : 'Choix au hasard');
+      }
+      m.id = `seat-m-${i}`; m.setAttribute('aria-label', `Modèle du siège ${i + 1}`);
+      li.append(m);
+      ol.append(li);
+    });
+  }
+  $('preset-btn').addEventListener('click', () => { config.seats = Array.from({ length: config.n }, (_, i) => defaultSeat(i)); saveConfig(); renderSeats(); });
+  // ---------- Composition ----------
+  function compoError(c, n) {
+    if (c.villagers < 0) return 'Trop de rôles spéciaux pour ce nombre de joueurs.';
+    if (c.wolves * 2 >= n - 1) return 'Trop de Loups : ils gagneraient dès la première nuit.';
+    return '';
+  }
+  function renderCompo() {
+    const c = config.compo;
+    c.villagers = config.n - c.wolves - (c.seer ? 1 : 0) - (c.witch ? 1 : 0);
+    $('nplayers').value = String(config.n); $('nwolves').value = String(c.wolves);
+    $('has-seer').checked = c.seer; $('has-witch').checked = c.witch;
+    for (const o of $('nwolves').options) o.disabled = Number(o.value) * 2 >= config.n - 1;
+    const err = compoError(c, config.n);
+    $('compo-warn').textContent = err; $('compo-warn').hidden = !err;
+    $('compo-note').textContent = err ? '' : `${Engine.compoText(Engine.compoKeys(c))}.`;
+    $('seats-title').textContent = `Les ${config.n} sièges`;
+  }
+  $('nplayers').addEventListener('change', (e) => {
+    config.n = Number(e.target.value); config.compo = Engine.presetCompo(config.n);
+    sanitizeSeats(); touch(); renderCompo(); renderSeats();
+  });
+  $('nwolves').addEventListener('change', (e) => { config.compo.wolves = Number(e.target.value); renderCompo(); saveConfig(); });
+  $('has-seer').addEventListener('change', (e) => { config.compo.seer = e.target.checked; renderCompo(); saveConfig(); });
+  $('has-witch').addEventListener('change', (e) => { config.compo.witch = e.target.checked; renderCompo(); saveConfig(); });
+
+  $('rounds').addEventListener('change', (e) => { config.rounds = Number(e.target.value); saveConfig(); });
+  $('maxdays').addEventListener('change', (e) => { config.maxDays = Number(e.target.value); saveConfig(); });
+  $('mayor').addEventListener('change', (e) => { config.mayor = e.target.checked; saveConfig(); });
+  $('series-size').addEventListener('change', (e) => { config.seriesSize = Number(e.target.value); saveConfig(); $('memory-wrap').hidden = config.seriesSize < 2; });
+  $('memory').addEventListener('change', (e) => { config.memory = Number(e.target.value); saveConfig(); });
+
+  // ---------- Catalogue OpenRouter et « Mes IA » ----------
+  let catalog = [];
+  const modelName = (id) => catalog.find((m) => m.id === id)?.name || id;
+  const price = (m) => {
+    const inp = Number(m.pricing?.prompt) * 1e6, out = Number(m.pricing?.completion) * 1e6;
+    if (!isFinite(inp) || !isFinite(out)) return '';
+    return inp === 0 && out === 0 ? 'gratuit' : `${inp.toFixed(2)} $ / ${out.toFixed(2)} $ par M tokens`;
+  };
+
+  async function loadModelList() {
+    if (!env.openrouter) return;
+    $('catalog-status').textContent = 'Chargement du catalogue OpenRouter…';
+    try {
+      const r = await fetch('https://openrouter.ai/api/v1/models');
+      const d = await r.json();
+      catalog = (d.data || []).map((m) => ({ id: m.id, name: m.name || m.id, pricing: m.pricing })).sort((a, b) => a.name.localeCompare(b.name));
+      $('catalog-status').textContent = `${catalog.length} modèles disponibles.`;
+      const unknown = config.roster.filter((id) => !catalog.some((m) => m.id === id));
+      if (unknown.length) $('catalog-status').textContent += ` Introuvable(s) dans le catalogue : ${unknown.join(', ')}. Retire-les ou remplace-les.`;
+      renderRoster(); renderSeats(); renderResults();
+    } catch (_) {
+      $('catalog-status').textContent = 'Catalogue injoignable pour l\'instant. Les IA déjà choisies restent utilisables.';
+    }
+  }
+
+  function renderRoster() {
+    const ul = $('roster'); ul.textContent = '';
+    for (const id of config.roster) {
+      const li = el('li'); li.title = id;
+      const name = el('span', null, modelName(id));
+      const rm = el('button', null, '×'); rm.type = 'button'; rm.setAttribute('aria-label', `Retirer ${modelName(id)}`);
+      rm.addEventListener('click', () => {
+        config.roster = config.roster.filter((x) => x !== id); touch(); renderRoster(); renderResults(); renderSeats();
+      });
+      li.append(name, rm); ul.append(li);
+    }
+    if (!config.roster.length) ul.append(el('li', 'hint', 'Aucune IA : ajoutes-en au moins une.'));
+  }
+
+  function renderResults() {
+    const ul = $('model-results'); ul.textContent = '';
+    const q = $('model-search').value.trim().toLowerCase();
+    if (!q || !catalog.length) return;
+    const words = q.split(/\s+/);
+    const hits = catalog.filter((m) => words.every((w) => (m.id + ' ' + m.name).toLowerCase().includes(w))).slice(0, 40);
+    if (!hits.length) { ul.append(el('li', 'hint', 'Aucun modèle ne correspond.')); return; }
+    for (const m of hits) {
+      const li = el('li');
+      const info = el('div'); info.append(el('div', 'mname', m.name), el('div', 'mid', `${m.id}${price(m) ? ' · ' + price(m) : ''}`));
+      const added = config.roster.includes(m.id);
+      const b = el('button', added ? 'ghost' : 'primary', added ? 'Ajoutée' : 'Ajouter'); b.type = 'button'; b.disabled = added;
+      b.addEventListener('click', () => { config.roster.push(m.id); touch(); renderRoster(); renderResults(); renderSeats(); });
+      li.append(info, b); ul.append(li);
+    }
+  }
+  $('model-search').addEventListener('input', renderResults);
+
+  $('spread-btn').addEventListener('click', () => {
+    if (!config.roster.length) { $('catalog-status').textContent = 'Ajoute au moins une IA avant de répartir.'; return; }
+    let k = 0;
+    config.seats = config.seats.map((s) => (s.provider === 'human' ? s : { provider: 'openrouter', model: config.roster[k++ % config.roster.length] }));
+    touch(); renderSeats();
+    $('catalog-status').textContent = `${config.roster.length} IA réparties sur ${k} sièges.`;
+  });
+
+  $('or-key-check').addEventListener('click', async () => {
+    const key = $('or-key').value.trim(); store.set('lga.key', key);
+    const st = $('key-status'); st.className = 'hint';
+    if (!key) { st.textContent = 'Colle d\'abord ta clé OpenRouter.'; return; }
+    st.textContent = 'Vérification…';
+    try {
+      const r = await fetch('https://openrouter.ai/api/v1/key', { headers: { Authorization: `Bearer ${key}` } });
+      if (r.status === 401) { st.textContent = 'Clé refusée par OpenRouter. Vérifie qu\'elle est complète.'; st.className = 'error'; return; }
+      const d = (await r.json())?.data || {};
+      const left = d.limit_remaining ?? (d.limit != null ? d.limit - (d.usage || 0) : null);
+      st.textContent = `Clé valide. Dépensé : ${(d.usage || 0).toFixed(2)} $${left != null ? ` · reste ${Number(left).toFixed(2)} $ sur cette clé` : ''}.`;
+      st.className = 'hint ok';
+    } catch (_) { st.textContent = 'OpenRouter injoignable. Vérifie ta connexion.'; st.className = 'error'; }
+  });
+
+  // ---------- Appels aux modèles ----------
+  // Toutes les requêtes en cours, pour pouvoir les annuler d'un coup (votes en parallèle).
+  const inflight = new Set();
+  const TIMEOUT_MS = 60000;
+  function newCtl() {
+    const c = new AbortController(); inflight.add(c);
+    c.done = () => { clearTimeout(c.timer); inflight.delete(c); };
+    return c;
+  }
+  function abortAll() { for (const c of inflight) { try { c.abort(); } catch (_) { /* rien */ } } inflight.clear(); }
+
+  async function callOpenRouter(model, system, prompt, game) {
+    const key = store.get('lga.key', '') || $('or-key').value.trim();
+    let useFormat = true;
+    let maxTokens = 2000;
+    for (let i = 0; i < 4; i++) {
+      const ctl = newCtl();
+      let timedOut = false;
+      ctl.timer = setTimeout(() => { timedOut = true; ctl.abort(); }, TIMEOUT_MS);
+      let res, data;
+      try {
+        res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST', signal: ctl.signal,
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'Arene des Loups' },
+          body: JSON.stringify({
+            model, temperature: 0.9, max_tokens: maxTokens, usage: { include: true },
+            reasoning: { effort: 'low', exclude: true },
+            messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
+            ...(useFormat ? { response_format: { type: 'json_object' } } : {}),
+          }),
+        });
+        data = await res.json().catch(() => null);
+      } catch (e) {
+        ctl.done();
+        if (game.stopped) throw e;
+        // Safari en arrière-plan coupe les requêtes : on attend la reprise sans compter d'essai.
+        if (document.hidden || game.paused) { await game.gate(); i--; continue; }
+        if (timedOut) throw new Error('pas de réponse en 60 s');
+        if (i < 3) { await sleep(1500 * (i + 1)); continue; }
+        throw new Error('réseau injoignable');
+      }
+      ctl.done();
+      const msg = data?.error?.message || `HTTP ${res.status}`;
+      if (res.status === 401) throw fatal('Clé OpenRouter refusée. Vérifie-la dans Réglages.');
+      if (res.status === 402) throw fatal('Crédit OpenRouter insuffisant pour continuer la partie.');
+      if (res.status === 404 || /not a valid model|no endpoints found/i.test(msg)) throw fatal(`Modèle introuvable sur OpenRouter : ${model}`);
+      if (res.status === 400 && useFormat) { useFormat = false; continue; }
+      if (res.status === 429 || res.status >= 500) { await sleep(2500 * (i + 1)); continue; }
+      if (!res.ok) throw new Error(msg);
+      game.cost = (game.cost || 0) + (data?.usage?.cost || 0);
+      const choice = data?.choices?.[0];
+      const c = choice?.message?.content;
+      if (!c && choice?.finish_reason === 'length' && maxTokens < 6000) { maxTokens = 6000; continue; }
+      if (!c) throw new Error(data?.error?.message || 'réponse vide');
+      return c;
+    }
+    throw new Error('service surchargé');
+  }
+
+  async function callClaude(tier, system, prompt, game) {
+    const run = () => {
+      const ctl = newCtl();
+      ctl.timer = setTimeout(() => ctl.abort(), 180000);
+      const opts = { modelTier: tier, cache: false, signal: ctl.signal };
+      if (tier !== 'quick') opts.effort = 'low';
+      return sample.json(`${system}\n\n${prompt}`, opts).finally(() => ctl.done());
+    };
+    try { return await run(); } catch (e) {
+      if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed', 'session_expired'].includes(e.code)) {
+        throw fatal(e.code === 'session_expired' ? 'Session Claude expirée : reconnecte-toi puis relance.' : 'Claude n\'est pas autorisé pour cette page. Autorise-le puis relance une partie.');
+      }
+      if (e.code === 'rate_limited') {
+        banner('Limite d\'utilisation de Claude atteinte. La partie est en pause : appuie sur Reprendre un peu plus tard.');
+        game.pause(); updatePause(); await game.gate();
+        return run();
+      }
+      if (e.code === 'cancelled' && !game.stopped) throw new Error('pas de réponse en 3 min');
+      throw new Error(e.message || e.code || 'erreur Claude');
+    }
+  }
+
+  // ---------- Partie ----------
+  let game = null;
+  let human = null;
+  let wakeLock = null;
+
+  async function keepAwake() {
+    try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (_) { wakeLock = null; }
+  }
+  let autoPaused = false;
+  document.addEventListener('visibilitychange', () => {
+    if (!game || game.phase === 'end') return;
+    if (document.visibilityState === 'hidden') {
+      if (!game.paused) { game.pause(); autoPaused = true; updatePause(); }
+    } else {
+      keepAwake();
+      if (autoPaused) banner('Partie en pause pendant que l\'appli était en arrière-plan. Appuie sur Reprendre pour continuer.');
+    }
+  });
+
+  function setThinking(text) { $('thinking').hidden = !text; if (text) $('thinking-text').textContent = text; }
+
+  function thinkingText(p, task) {
+    const r = canReveal();
+    if (task.kind === 'speech') return `${p.name} prend la parole…`;
+    if (task.kind === 'vote') return r ? `${p.name} vote…` : 'Le village vote…';
+    return r ? `${p.name} (${p.role}) agit dans la nuit…` : 'Le village dort…';
+  }
+
+  async function agent(p, task) {
+    setThinking(thinkingText(p, task));
+    markSpeaking(task.kind === 'speech' ? p.id : null);
+    try {
+      switch (p.seat.provider) {
+        case 'bot': await sleep(task.kind === 'speech' ? 500 : 150); return Engine.botAgent(p, task);
+        case 'human': setThinking(null); return await humanTurn(p, task);
+        case 'openrouter': return await callOpenRouter(p.seat.model, task.system, task.prompt, task.game);
+        case 'claude': return await callClaude(p.seat.model, task.system, task.prompt, task.game);
+      }
+      throw fatal('Fournisseur inconnu');
+    } finally { setThinking(null); }
+  }
+
+  function startError(msg) { const e = $('setup-error'); e.textContent = msg; e.hidden = !msg; if (msg) show('setup'); }
+
+  // ---------- Séries ----------
+  // Dans une série, les sièges gardent le même pseudonyme (ordre tiré une fois) et chaque IA
+  // reçoit le résumé de ses X dernières parties.
+  let series = store.get('lga.series', null);
+  const saveSeries = () => store.set('lga.series', series);
+  let nextTimer = null;
+
+  function shuffleArr(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  // compo : null pour une partie reprise (composition déjà distribuée).
+  function checkSeats(seats, compo = config.compo) {
+    renderCompo();
+    const cerr = compo ? compoError({ ...compo, villagers: seats.length - compo.wolves - (compo.seer ? 1 : 0) - (compo.witch ? 1 : 0) }, seats.length) : '';
+    if (cerr) return cerr;
+    if (seats.some((s) => s.provider === 'openrouter')) {
+      const key = $('or-key').value.trim(); store.set('lga.key', key);
+      if (!key) return 'Colle ta clé OpenRouter avant de lancer la partie.';
+      const empty = seats.findIndex((s) => s.provider === 'openrouter' && !s.model);
+      if (empty >= 0) return `Le siège ${empty + 1} n'a pas de modèle.`;
+    }
+    if (seats.some((s) => s.provider === 'claude') && !sample) return 'Claude n\'est pas disponible ici. Choisis d\'autres joueurs.';
+    return '';
+  }
+
+  function startGame() {
+    if (game && game.phase !== 'end') return;
+    clearTimeout(nextTimer);
+    startError('');
+    const seats = config.seats.map((s, i) => ({ ...s, id: `s${i + 1}` }));
+    const err = checkSeats(seats);
+    if (err) return startError(err);
+    const cur = store.get('lga.current', null);
+    if (((series && !series.done) || cur) && !replaceOk) {
+      $('replace-text').textContent = cur
+        ? 'Une partie interrompue peut encore être reprise depuis l\'onglet Partie. En lancer une nouvelle l\'abandonne.'
+        : `Une série est en cours (partie ${series.index} sur ${series.size}). En lancer une nouvelle l'abandonne.`;
+      $('replace-confirm').hidden = false; show('setup');
+      return;
+    }
+    replaceOk = false; $('replace-confirm').hidden = true;
+    store.set('lga.current', null);
+    if (config.seriesSize > 1) {
+      series = {
+        id: `serie-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}-${Math.random().toString(36).slice(2, 6)}`,
+        size: config.seriesSize, memoryGames: config.memory, index: 1,
+        seats: shuffleArr(seats), compo: { ...config.compo }, rounds: config.rounds, maxDays: config.maxDays, mayor: config.mayor,
+        recaps: {},
+      };
+      saveSeries();
+      return launch();
+    }
+    series = null; store.set('lga.series', null);
+    launch(seats);
+  }
+  let replaceOk = false;
+  $('replace-yes').addEventListener('click', () => { replaceOk = true; series = null; store.set('lga.series', null); startGame(); });
+  $('replace-no').addEventListener('click', () => { $('replace-confirm').hidden = true; });
+
+  function launch(singleSeats, snap) {
+    if (game && game.phase !== 'end') return;
+    clearTimeout(nextTimer);
+    const inSeries = snap ? !!(snap.series && series && series.id === snap.series.id) : !singleSeats && series;
+    const seats = snap ? snap.players.map((p) => p.seat) : inSeries ? series.seats.map((s) => ({ ...s })) : singleSeats;
+    if (inSeries || snap) { const err = checkSeats(seats, snap ? null : series.compo); if (err) return startError(err); }
+    banner(''); autoPaused = false;
+    $('feed').textContent = ''; $('result').hidden = true; $('idle').hidden = true; $('game').hidden = false;
+    $('reveal').checked = false; $('stop-confirm').hidden = true;
+    $('series-label').hidden = !inSeries;
+    if (inSeries) $('series-label').textContent = `Série · partie ${series.index} sur ${series.size}${series.memoryGames ? ` · mémoire : ${series.memoryGames} partie${series.memoryGames > 1 ? 's' : ''}` : ''}`;
+    const opts = {
+      seats, agent, onEvent,
+      onCheckpoint: (sn) => {
+        // Stockage plein : on libère d'abord les vieux logs détaillés, jamais la partie en cours.
+        if (store.set('lga.current', sn)) return;
+        const logs = store.get('lga.logs', []);
+        while (logs.length && !store.set('lga.current', sn)) { logs.shift(); store.set('lga.logs', logs); }
+      },
+      compo: inSeries ? { ...series.compo } : { ...config.compo },
+      debateRounds: inSeries ? series.rounds : config.rounds,
+      maxDays: inSeries ? series.maxDays : config.maxDays,
+      mayor: inSeries ? series.mayor : config.mayor,
+      minNightMs: seats.some((s) => s.provider === 'human') ? 8000 : 0,
+      parallelVotes: seats.every((s) => s.provider === 'openrouter' || s.provider === 'bot'),
+    };
+    if (inSeries) {
+      const sr = series;
+      Object.assign(opts, {
+        fixedOrder: true,
+        series: { id: sr.id, index: sr.index, size: sr.size, memoryGames: sr.memoryGames },
+        memoryFor: (p) => (sr.memoryGames ? (sr.recaps[p.seat.id] || []).slice(-sr.memoryGames).join('\n') : ''),
+      });
+    }
+    game = snap ? Engine.Game.restore(snap, opts) : new Engine.Game(opts);
+    human = game.players.find((p) => p.seat.provider === 'human') || null;
+    if (snap) { rerenderFeed(); $('feed').append(el('li', 'ev narr', `Partie reprise au ${snap.next === 'day' ? 'jour' : 'début de la nuit'} ${snap.next === 'day' ? snap.day : snap.day + 1}.`)); }
+    $('reveal').disabled = !!human;
+    renderPlayers(); updatePhase(); updatePause();
+    show('play'); keepAwake();
+    const g = game;
+    g.run().then((summary) => {
+      store.set('lga.current', null);
+      if (summary) {
+        saveGame(summary, g);
+        if (inSeries) {
+          for (const p of g.players) (series.recaps[p.seat.id] ||= []).push(Engine.gameRecap(g, p, series.index));
+          series.index++;
+          if (series.index > series.size) series.done = true;
+          saveSeries();
+        }
+      }
+      finishGame();
+    }).catch((e) => { g.phase = 'end'; banner(`${e.message || String(e)} La partie est sauvegardée : tu pourras la reprendre depuis l'onglet Partie.`); finishGame(true); renderIdle(); });
+  }
+  $('start-btn').addEventListener('click', startGame);
+  $('idle-start').addEventListener('click', startGame);
+  $('series-resume-btn').addEventListener('click', () => launch());
+  $('series-drop-btn').addEventListener('click', () => { series = null; store.set('lga.series', null); renderIdle(); });
+
+  $('current-resume-btn').addEventListener('click', () => { const sn = store.get('lga.current', null); if (sn) launch(null, sn); });
+  $('current-drop-btn').addEventListener('click', () => { store.set('lga.current', null); renderIdle(); });
+
+  function renderIdle() {
+    const cur = store.get('lga.current', null);
+    $('current-resume').hidden = !cur;
+    if (cur) $('current-resume-text').textContent = `Une partie a été interrompue (${cur.next === 'day' ? `jour ${cur.day}` : `avant la nuit ${cur.day + 1}`}${cur.series ? `, série ${cur.series.index}/${cur.series.size}` : ''}).`;
+    const live = series && !series.done && !cur;
+    $('series-resume').hidden = !live;
+    if (live) $('series-resume-text').textContent = `Une série est en cours : partie ${series.index} sur ${series.size}.`;
+  }
+
+  function finishGame(failed) {
+    setThinking(null); markSpeaking(null); hideHuman();
+    try { wakeLock?.release(); } catch (_) { /* rien */ }
+    $('reveal').disabled = false;
+    $('pause-btn').disabled = true; $('stop-btn').disabled = true;
+    renderPlayers(); renderResult(failed);
+  }
+
+  function banner(text) {
+    let b = $('banner');
+    if (!text) { if (b) b.remove(); return; }
+    if (!b) { b = el('p', 'confirm error'); b.id = 'banner'; $('game').insertBefore(b, $('feed')); }
+    b.textContent = text;
+  }
+
+  function updatePause() {
+    const b = $('pause-btn');
+    b.disabled = !game || game.phase === 'end'; $('stop-btn').disabled = b.disabled;
+    b.textContent = game?.paused ? 'Reprendre' : 'Pause';
+  }
+  $('pause-btn').addEventListener('click', () => {
+    if (!game) return;
+    if (game.paused) { banner(''); autoPaused = false; game.resume(); } else game.pause();
+    updatePause();
+  });
+  $('stop-btn').addEventListener('click', () => { $('stop-confirm').hidden = false; });
+  $('stop-no').addEventListener('click', () => { $('stop-confirm').hidden = true; });
+  $('stop-yes').addEventListener('click', () => {
+    $('stop-confirm').hidden = true;
+    if (!game) return;
+    game.stop(); abortAll();
+    if (humanResolve) humanResolve({ pensee: '', message: '…', cible: 0, vote: 0, sauver: false, empoisonner: 0 });
+  });
+  $('reveal').addEventListener('change', () => { renderPlayers(); rerenderFeed(); });
+
+  function canReveal() {
+    if (!game) return false;
+    if (game.phase === 'end') return $('reveal').checked;
+    return $('reveal').checked && (!human || !human.alive);
+  }
+  function canSee(ev) {
+    if (!ev.secret) return true;
+    if (canReveal()) return true;
+    if (human && ev.pid === human.id) return true;
+    if (human && human.roleKey === 'LOUP' && game.get(ev.pid)?.roleKey === 'LOUP') return true;
+    return false;
+  }
+  function knowsRole(p) {
+    if (!p.alive || game.phase === 'end' || canReveal()) return true;
+    if (human && (p.id === human.id || (human.roleKey === 'LOUP' && p.roleKey === 'LOUP'))) return true;
+    return false;
+  }
+
+  const roleClass = (p) => ({ LOUP: 'wolf', VOYANTE: 'seer', SORCIERE: 'witch' }[p.roleKey] || 'village');
+  let debateRound = 0;
+  let ballots = 0;
+
+  function updatePhase() {
+    if (!game) return;
+    const a = game.alive().length;
+    const night = game.phase === 'night';
+    $('band').className = `phase-band ${night ? 'night' : 'day'}`;
+    let t, sub, count = `${a} en vie`;
+    if (night) { t = `Nuit ${game.day}`; sub = 'Le village dort. Les rôles agissent.'; }
+    else if (game.phase === 'mayor') { t = 'Présentations'; sub = 'Chacun se présente, puis le village élit son Maire.'; if (ballots) count = `${ballots} / ${a} votes`; }
+    else if (game.phase === 'vote') { t = 'Vote'; sub = `Jour ${game.day} · qui quitte le village ?`; count = `${ballots} / ${a} votes`; }
+    else if (game.phase === 'end') {
+      t = 'Fin de partie'; count = '';
+      sub = game.winner === 'village' ? 'Le Village l\'emporte.' : game.winner === 'loups' ? 'Les Loups-Garous l\'emportent.' : '';
+    } else { t = `Jour ${game.day}`; sub = debateRound ? `Débat · tour ${debateRound} sur ${game.debateRounds}` : 'Le village se réveille.'; }
+    $('phase-label').textContent = t; $('phase-sub').textContent = sub; $('phase-count').textContent = count;
+  }
+
+  function renderPlayers() {
+    const ul = $('players'); ul.textContent = '';
+    if (!game) return;
+    const showModels = game.phase === 'end' || canReveal();
+    for (const p of game.players) {
+      const li = el('li', 'pl'); li.id = `pl-${p.id}`;
+      if (!p.alive) li.classList.add('dead');
+      const me = human && p.id === human.id;
+      if (me) li.classList.add('me');
+      const known = knowsRole(p);
+      if (known) li.classList.add(roleClass(p));
+      li.title = `${p.name}${known ? ` · ${p.role}` : ''}${showModels ? ` · ${Engine.seatLabel(p.seat)}` : ''}`;
+      li.append(el('span', 'tok', String(p.id)));
+      li.append(el('span', 'lbl', me ? 'Toi' : showModels ? Engine.seatLabel(p.seat) : p.name));
+      if (known) li.append(el('span', 'role', p.role));
+      if (game.mayor === p) li.append(el('span', 'role mayor', 'Maire'));
+      ul.append(li);
+    }
+  }
+  function markSpeaking(id) {
+    document.querySelectorAll('.pl.speaking').forEach((e) => e.classList.remove('speaking'));
+    if (id) $(`pl-${id}`)?.classList.add('speaking');
+  }
+
+  function nearBottom() { return window.innerHeight + window.scrollY >= document.body.scrollHeight - 160; }
+
+  function onEvent(ev) {
+    const stick = nearBottom();
+    const li = renderEvent(ev);
+    if (li) $('feed').append(li);
+    if (ev.kind === 'phase') { debateRound = 0; ballots = 0; }
+    if (ev.kind === 'speech' && ev.round !== debateRound) { debateRound = ev.round; updatePhase(); }
+    if (ev.kind === 'ballot') { ballots = ev.n; updatePhase(); return; }
+    if (['dawn', 'vote', 'end', 'phase', 'start', 'mayor', 'mayor_succession'].includes(ev.kind)) { renderPlayers(); updatePhase(); }
+    if (stick && li) li.scrollIntoView({ block: 'end', behavior: 'smooth' });
+  }
+  function rerenderFeed() {
+    const f = $('feed'); f.textContent = '';
+    for (const ev of game?.events || []) { const li = renderEvent(ev); if (li) f.append(li); }
+  }
+
+  function pensee(ev) {
+    const show = canReveal() || (human && ev.pid === human.id);
+    if (!show || !ev.pensee || ev.pensee === '(hasard)') return null;
+    return el('p', 'pensee', `Pensée : ${ev.pensee}`);
+  }
+
+  function renderEvent(ev) {
+    if (!canSee(ev)) return null;
+    switch (ev.kind) {
+      case 'start': return el('li', 'ev narr', ev.text);
+      case 'phase': return el('li', 'ev phase', ev.text);
+      case 'ballot': return null;
+      case 'mayor': case 'mayor_succession': {
+        const li = el('li', 'ev narr vote'); li.append(el('div', null, ev.text));
+        if (ev.votes) { const log = el('ul', 'votelog'); for (const v of ev.votes) log.append(el('li', null, `J${v.from} → J${v.to}`)); li.append(log); }
+        return li;
+      }
+      case 'dawn': return el('li', 'ev narr', ev.text);
+      case 'error': return el('li', 'ev error', canReveal() && ev.detail ? `${ev.text} (${ev.detail})` : ev.text);
+      case 'end': { const li = el('li', 'ev narr'); li.append(el('strong', null, ev.text)); return li; }
+      case 'wolf_chat': case 'wolf_decision': {
+        const li = el('li', 'ev night');
+        li.append(el('div', 'tag', 'Canal secret des Loups'), el('div', null, ev.text));
+        const pe = pensee(ev); if (pe) li.append(pe);
+        return li;
+      }
+      case 'night': {
+        const li = el('li', 'ev night');
+        li.append(el('div', 'tag', canReveal() ? 'Coulisses de la nuit' : 'Ta nuit'), el('div', null, ev.text));
+        const pe = pensee(ev); if (pe) li.append(pe);
+        return li;
+      }
+      case 'speech': {
+        const p = game.get(ev.pid);
+        const li = el('li', 'ev speech'); if (human && p.id === human.id) li.classList.add('mine');
+        const bub = el('div', 'bub');
+        const who = el('div', 'who'); who.append(el('span', null, human && p.id === human.id ? 'Toi' : p.name));
+        if (game.debateRounds > 1) who.append(el('span', 'round', `tour ${ev.round}`));
+        if (canReveal()) {
+          who.append(el('span', `pill ${roleClass(p)}`, p.role));
+          who.append(el('span', 'tag', Engine.seatLabel(p.seat)));
+          if (ev.lies) who.append(el('span', 'pill lie', ev.lies > 1 ? `${ev.lies} mensonges` : 'mensonge'));
+          if (ev.leaks) who.append(el('span', 'pill lie', 'identité caviardée'));
+        }
+        bub.append(who, el('p', 'msg', ev.message));
+        const pe = pensee(ev); if (pe) bub.append(pe);
+        li.append(el('span', 'av', String(p.id)), bub);
+        return li;
+      }
+      case 'vote': {
+        const li = el('li', 'ev narr vote');
+        li.append(el('div', null, ev.text));
+        const counts = new Map();
+        for (const v of ev.votes) counts.set(v.to, (counts.get(v.to) || 0) + (v.weight || 1));
+        const max = Math.max(...counts.values());
+        const tally = el('ul', 'tally');
+        for (const [id, n] of [...counts.entries()].sort((a, b) => b[1] - a[1])) {
+          const row = el('li'); if (n === max) row.classList.add('lead');
+          const track = el('span', 'track'); const fill = el('span', 'fill'); fill.style.display = 'block'; fill.style.width = `${Math.round((100 * n) / [...counts.values()].reduce((a, b) => a + b, 0))}%`; track.append(fill);
+          row.append(el('span', null, human && id === human.id ? 'Toi' : `Joueur ${id}`), track, el('span', 'n', String(n)));
+          tally.append(row);
+        }
+        const log = el('ul', 'votelog');
+        for (const v of ev.votes) log.append(el('li', null, `J${v.from}${v.weight > 1 ? ' ×2' : ''} → J${v.to}${v.fallback ? ' (hasard)' : ''}`));
+        li.append(tally, log);
+        return li;
+      }
+    }
+    return null;
+  }
+
+  function renderResult(failed) {
+    const box = $('result'); box.textContent = ''; box.hidden = false;
+    box.className = 'card result';
+    if (failed || !game || game.winner === 'abandon') {
+      box.append(el('h2', null, failed ? 'Partie interrompue par une erreur' : 'Partie arrêtée'));
+      box.append(el('p', 'hint', 'Elle ne compte pas dans les statistiques.'));
+    } else {
+      const v = el('div', `verdict ${game.winner === 'village' ? 'village' : game.winner === 'loups' ? 'loups' : ''}`);
+      v.append(el('p', 'eyebrow', `Jour ${game.day}`), el('h2', null, game.winner === 'village' ? 'Victoire du Village' : game.winner === 'loups' ? 'Victoire des Loups' : 'Égalité'));
+      if (game.cost) v.append(el('p', 'hint', `Coût OpenRouter : ${game.cost.toFixed(4)} $`));
+      box.append(v);
+      const tot = game.players.reduce((a, p) => ({ sp: a.sp + p.stats.speeches, li: a.li + p.stats.lies, v: a.v + p.stats.votes, g: a.g + p.stats.goodVotes }), { sp: 0, li: 0, v: 0, g: 0 });
+      const kpis = el('div', 'kpis');
+      for (const [b, l] of [[tot.sp, 'Messages'], [tot.li, 'Mensonges'], [pct(tot.g, tot.v), 'Votes justes']]) {
+        const k = el('div', 'kpi'); const bb = el('b', 'num', String(b)); k.append(bb, el('span', null, l)); kpis.append(k);
+      }
+      box.append(kpis);
+      const cast = el('ul', 'cast');
+      for (const p of game.players) {
+        const li = el('li'); if (!p.alive) li.classList.add('dead');
+        const mid = el('div'); mid.style.minWidth = '0';
+        const who = el('div', 'who'); who.append(el('span', null, `${p.name} `), el('span', `pill ${roleClass(p)}`, p.role));
+        mid.append(who, el('div', 'mdl', Engine.seatLabel(p.seat)));
+        const fate = el('div', 'fate', `${p.won ? 'gagné' : 'perdu'} · ${p.alive ? 'vivant' : `mort J${p.deathDay}`}`);
+        fate.append(el('br'), `${p.stats.lies} mensonge${p.stats.lies > 1 ? 's' : ''}`);
+        li.append(el('span', 'av', String(p.id)), mid, fate);
+        cast.append(li);
+      }
+      box.append(cast);
+    }
+    const row = el('div', 'row wrap');
+    if (series && !series.done && game?.series) {
+      const ok = !failed && game.winner !== 'abandon';
+      const next = el('button', 'primary', ok ? `Partie ${series.index} sur ${series.size}` : 'Reprendre la série'); next.type = 'button';
+      next.addEventListener('click', () => launch());
+      const quit = el('button', 'ghost danger', 'Arrêter la série'); quit.type = 'button';
+      quit.addEventListener('click', () => { clearTimeout(nextTimer); series = null; store.set('lga.series', null); box.querySelector('.countdown')?.remove(); next.remove(); quit.remove(); });
+      row.append(next, quit);
+      if (ok) {
+        const cd = el('p', 'hint countdown'); box.append(cd);
+        let left = 10;
+        const tick = () => { if (!box.contains(cd)) return; if (left <= 0) { launch(); return; } cd.textContent = `Partie suivante dans ${left} s.`; left--; nextTimer = setTimeout(tick, 1000); };
+        tick();
+      }
+      box.append(row);
+      updatePause(); updatePhase();
+      return;
+    }
+    if (series?.done && game?.series) box.append(el('p', 'ok-line', `Série terminée : ${series.size} parties jouées. Compare les modèles dans Stats.`));
+    const again = el('button', 'primary', 'Rejouer'); again.type = 'button'; again.addEventListener('click', startGame);
+    const st = el('button', 'ghost', 'Voir les stats'); st.type = 'button'; st.addEventListener('click', () => show('stats'));
+    row.append(again, st); box.append(row);
+    updatePause(); updatePhase();
+  }
+
+  // ---------- Joueur humain ----------
+  let humanResolve = null;
+  function hideHuman() { $('human').hidden = true; humanResolve = null; }
+
+  function humanTurn(p, task) {
+    return new Promise((resolve) => {
+      humanResolve = (v) => { hideHuman(); resolve(v); };
+      const g = task.game;
+      $('human-role').textContent = `${p.name} · ${p.role}`;
+      $('human').className = `sheet fixed ${{ seer: 'seer', wolf: 'wolf', witch: 'witch' }[task.kind] || ''}`;
+      $('human-targets').className = 'ballot';
+      const memo = $('human-memo-list'); memo.textContent = '';
+      for (const m of p.memory) memo.append(el('li', null, m));
+      $('human-memo').hidden = !p.memory.length;
+      const targets = $('human-targets'); targets.textContent = '';
+      const text = $('human-text'); text.value = ''; text.hidden = true;
+      $('human-witch').hidden = true;
+      let chosen = null;
+      const pickTargets = (opts) => {
+        for (const q of opts) {
+          const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', 'false');
+          const known = q.alive && knowsRole(q) && q.id !== p.id;
+          const name = el('span', null, q.name); if (known) name.append(el('small', null, q.role));
+          b.append(el('span', 'av', String(q.id)), name);
+          b.addEventListener('click', () => { chosen = q.id; targets.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); });
+          targets.append(b);
+        }
+      };
+      const title = { mayor_vote: 'Élection du Maire : pour qui votes-tu ?', mayor_succession: 'Tu étais Maire : choisis ton successeur', wolf_chat: 'Canal des Loups : discute avec ta meute', wolf_vote: 'Vote de la meute : qui attaquer ?', seer: 'Voyante : qui veux-tu sonder ?', wolf: 'Loup-Garou : qui attaquer cette nuit ?', witch: 'Sorcière : tes potions', speech: 'À toi de parler au village', vote: 'Qui veux-tu éliminer ?' }[task.kind];
+      $('human-title').textContent = title;
+      let desc = '';
+      if (task.kind === 'seer' || task.kind === 'vote' || task.kind === 'mayor_vote' || task.kind === 'mayor_succession') pickTargets(task.options);
+      if (task.kind === 'wolf_chat' || task.kind === 'wolf_vote') {
+        pickTargets(task.options);
+        const tonight = task.channel.slice(task.channel.lastIndexOf(`— Nuit ${g.day} —`) + 1);
+        desc = tonight.length ? tonight.join('\n') : 'Personne n\'a encore parlé cette nuit.';
+        if (task.kind === 'wolf_chat') { text.hidden = false; text.placeholder = 'Ton message à la meute…'; }
+      }
+      if (task.kind === 'wolf') {
+        pickTargets(task.options); text.hidden = false; text.placeholder = 'Message à ta meute (facultatif)';
+        const talk = task.prompt.match(/Messages de ta meute cette nuit :\n([\s\S]*?)\n\nACTION/);
+        if (talk) desc = talk[1];
+      }
+      if (task.kind === 'speech') { text.hidden = false; text.placeholder = 'Ton message au village…'; desc = g.phase === 'mayor' ? 'Présente-toi au village avant l\'élection du Maire.' : `Tour de parole ${task.round}. Tout le village lira ton message.`; }
+      if (task.kind === 'witch') {
+        $('human-witch').hidden = false;
+        const v = g.get(task.victim);
+        desc = `Les Loups ont attaqué ${v.name}${v.id === p.id ? ' (toi)' : ''}.`;
+        $('human-save').checked = false; $('human-save').disabled = !g.witch.heal;
+        const sel = $('human-poison'); sel.textContent = '';
+        const none = el('option', null, 'Personne'); none.value = '0'; sel.append(none);
+        for (const q of task.options) { const o = el('option', null, q.name); o.value = String(q.id); sel.append(o); }
+        sel.disabled = !g.witch.poison;
+      }
+      $('human-desc').textContent = desc;
+      $('human').hidden = false;
+      $('human-send').onclick = () => {
+        if (task.kind === 'speech') {
+          const m = text.value.trim(); if (!m) { text.focus(); return; }
+          humanResolve({ pensee: '', message: m, role_annonce: null, affirmations: [] });
+        } else if (task.kind === 'wolf_chat') {
+          const m = text.value.trim(); if (!m || !chosen) { (m ? targets : text).querySelector?.('button')?.focus(); if (!m) text.focus(); return; }
+          humanResolve({ pensee: '', message: m, proposition: chosen });
+        } else if (task.kind === 'witch') {
+          humanResolve({ pensee: '', sauver: $('human-save').checked, empoisonner: Number($('human-poison').value) });
+        } else {
+          if (!chosen) return;
+          const key = task.kind === 'vote' || task.kind === 'mayor_vote' ? 'vote' : 'cible';
+          humanResolve({ pensee: '', message_meute: text.value.trim(), [key]: chosen });
+        }
+      };
+    });
+  }
+
+  // ---------- Statistiques ----------
+  function saveGame(summary, g) {
+    const games = store.get('lga.games', []); games.push(summary); store.set('lga.games', games);
+    const logs = store.get('lga.logs', []);
+    let log;
+    try { log = window.LGAnalytics ? LGAnalytics.fromEngine(g, { app: 'arene-v1', labelOf: Engine.seatLabel }) : null; } catch (_) { log = null; }
+    logs.push(log || { id: summary.id, events: g.events.map(({ t, ...e }) => e) });
+    while (logs.length > 10) logs.shift();
+    if (!store.set('lga.logs', logs)) store.set('lga.logs', logs.slice(-3));
+  }
+
+  const pct = (a, b) => (b ? `${Math.round((100 * a) / b)} %` : '–');
+
+  let statsCompo = null;
+  function renderStats() {
+    const all = store.get('lga.games', []).filter((g) => g.winner !== 'abandon');
+    const counts = new Map();
+    for (const g of all) { const k = g.compo || '8 joueurs : 2 Loups-Garous, 1 Voyante, 1 Sorcière, 4 Villageois'; g.compo = k; counts.set(k, (counts.get(k) || 0) + 1); }
+    const sel = $('stats-compo'); sel.textContent = '';
+    const comps = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    if (!statsCompo || (statsCompo !== '*' && !counts.has(statsCompo))) statsCompo = comps[0]?.[0] || '*';
+    for (const [k, n] of comps) { const o = el('option', null, `${k} (${n})`); o.value = k; sel.append(o); }
+    const allOpt = el('option', null, `Toutes les compositions (${all.length})`); allOpt.value = '*'; sel.append(allOpt);
+    sel.value = statsCompo;
+    $('stats-compo-wrap').hidden = comps.length < 2;
+    const games = statsCompo === '*' ? all : all.filter((g) => g.compo === statsCompo);
+    const rows = Engine.aggregate(games);
+    $('stats-empty').hidden = rows.length > 0;
+    $('stats-table').hidden = rows.length === 0;
+    const tb = $('stats-table').querySelector('tbody'); tb.textContent = '';
+    for (const s of rows) {
+      const tr = el('tr');
+      const name = el('td', 'model', s.label); name.title = s.label;
+      const win = el('td'); const bar = el('span', 'bar'); bar.style.width = `${Math.round((40 * s.wins) / s.games)}px`; win.append(bar, pct(s.wins, s.games));
+      tr.append(name, el('td', null, String(s.games)), win,
+        el('td', null, `${pct(s.wolfWins, s.wolfGames)} (${s.wolfGames})`), el('td', null, `${pct(s.villWins, s.villGames)} (${s.villGames})`),
+        el('td', null, pct(s.days, s.games)), el('td', null, s.speeches ? (s.lies / s.speeches).toFixed(2) : '–'), el('td', null, pct(s.goodVotes, s.votes)));
+      tb.append(tr);
+    }
+    const roles = ['Loup-Garou', 'Voyante', 'Sorcière', 'Villageois'];
+    const rt = $('roles-table');
+    rt.querySelector('thead').textContent = ''; rt.querySelector('tbody').textContent = '';
+    const hr = el('tr'); hr.append(el('th', null, 'Modèle')); for (const r of roles) hr.append(el('th', null, r));
+    rt.querySelector('thead').append(hr);
+    for (const s of rows) {
+      const tr = el('tr'); tr.append(el('td', 'model', s.label));
+      for (const r of roles) { const x = s.roles[r]; tr.append(el('td', null, x ? `${pct(x.wins, x.games)} (${x.games})` : '–')); }
+      rt.querySelector('tbody').append(tr);
+    }
+    rt.hidden = rows.length === 0;
+    const h = $('history'); h.textContent = '';
+    for (const g of games.slice(-20).reverse()) {
+      const li = el('li');
+      const d = new Date(g.date);
+      li.append(el('span', null, d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })));
+      li.append(el('span', `w-${g.winner}`, g.winner === 'village' ? 'Village' : g.winner === 'loups' ? 'Loups' : 'Égalité'));
+      li.append(el('span', 'hint', `${g.series ? `série ${g.series.index}/${g.series.size} · ` : ''}${g.players.length} joueurs · ${g.days} jours · loups : ${g.players.filter((p) => p.team === 'loups').map((p) => p.label).join(', ')}`));
+      h.append(li);
+    }
+    if (!games.length) h.append(el('li', 'hint', 'Les parties terminées s\'afficheront ici.'));
+  }
+
+  $('stats-compo').addEventListener('change', (e) => { statsCompo = e.target.value; renderStats(); });
+  $('export-btn').addEventListener('click', async () => {
+    const data = JSON.stringify({ games: store.get('lga.games', []), logs: store.get('lga.logs', []) }, null, 1);
+    const box = $('export-box'); box.value = data; box.hidden = false;
+    try { await navigator.clipboard.writeText(data); $('stats-msg').textContent = 'Données copiées dans le presse-papiers.'; }
+    catch (_) { box.select(); $('stats-msg').textContent = 'Copie automatique refusée : sélectionne le texte ci-dessus et copie-le.'; }
+  });
+  $('reset-btn').addEventListener('click', () => { $('reset-confirm').hidden = false; });
+  $('reset-no').addEventListener('click', () => { $('reset-confirm').hidden = true; });
+  $('reset-yes').addEventListener('click', () => {
+    store.set('lga.games', []); store.set('lga.logs', []); $('reset-confirm').hidden = true;
+    $('stats-msg').textContent = 'Historique effacé.'; renderStats();
+  });
+
+  // ---------- Démarrage ----------
+  // Dans Claude, le moteur n'est connu qu'après la réponse de claude.use : on n'écrit les sièges par défaut qu'ensuite.
+  const freshConfig = !Array.isArray(config.seats);
+  let envReady = !IN_CLAUDE;
+  function boot() {
+    if (freshConfig && envReady && !config.touched) config.seats = null;
+    sanitizeSeats(); if (envReady) saveConfig();
+    renderEnv(); renderCompo(); renderRoster(); renderSeats();
+    $('rounds').value = String(config.rounds); $('maxdays').value = String(config.maxDays);
+    $('mayor').checked = config.mayor; $('series-size').value = String(config.seriesSize); $('memory').value = String(config.memory);
+    $('memory-wrap').hidden = config.seriesSize < 2;
+    renderIdle();
+  }
+  boot();
+  let v = 'play'; try { v = sessionStorage.getItem('lga.view') || 'play'; } catch (_) { /* rien */ }
+  show(v);
+  loadModelList();
+  if (IN_CLAUDE) {
+    window.claude.use('sample').then((s) => { sample = s; env.claude = !!s; envReady = true; boot(); }).catch(() => { envReady = true; boot(); });
+  }
+})();
+
+</script>
