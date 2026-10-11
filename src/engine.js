@@ -176,7 +176,7 @@ class Game {
       deathDay: null,
       deathCause: null,
       memory: [],
-      stats: { identityLeaks: 0, speeches: 0, claims: 0, lies: 0, votes: 0, goodVotes: 0, errors: 0, fallbacks: 0, seerFound: 0, saves: 0, poisonOnWolf: 0, poisonOnVillage: 0 },
+      stats: { identityLeaks: 0, speeches: 0, claims: 0, lies: 0, votes: 0, goodVotes: 0, errors: 0, fallbacks: 0, calls: 0, callMs: 0, timeouts: 0, seerFound: 0, saves: 0, poisonOnWolf: 0, poisonOnVillage: 0 },
     }));
     this.witch = { heal: true, poison: true };
     this.attacked = new Set();
@@ -287,8 +287,14 @@ ${hist}`;
       try {
         const prompt = task.prompt + (lastErr ? `\n\nTa réponse précédente était invalide (${lastErr}). Réponds de nouveau, strictement au format demandé.` : '');
         const t0 = Date.now();
-        const raw = await this.agent(p, { ...task, prompt, system: SYSTEM_PROMPT, game: this });
-        if (p.seat.provider !== 'human') { this.callTimes.push(Date.now() - t0); if (this.callTimes.length > 30) this.callTimes.shift(); }
+        let raw;
+        try { raw = await this.agent(p, { ...task, prompt, system: SYSTEM_PROMPT, game: this }); } finally {
+          if (p.seat.provider !== 'human' && !this.stopped) {
+            const ms = Date.now() - t0;
+            this.callTimes.push(ms); if (this.callTimes.length > 30) this.callTimes.shift();
+            p.stats.calls = (p.stats.calls || 0) + 1; p.stats.callMs = (p.stats.callMs || 0) + ms;
+          }
+        }
         if (this.stopped) throw new StopGame();
         const obj = parseJsonLoose(raw);
         const err = task.validate(obj);
@@ -297,6 +303,8 @@ ${hist}`;
       } catch (e) {
         if (e instanceof StopGame || e?.fatal) throw e;
         lastErr = e?.message || String(e);
+        // Trop lent ou quota épuisé : on a déjà assez attendu, pas de seconde tentative.
+        if (e?.slow) { p.stats.errors++; p.stats.timeouts = (p.stats.timeouts || 0) + 1; break; }
       }
       p.stats.errors++;
     }
@@ -304,7 +312,10 @@ ${hist}`;
     const night = ['seer', 'wolf', 'wolf_chat', 'wolf_vote', 'witch'].includes(task.kind) || (task.kind === 'mayor_succession' && this.phase === 'night');
     this.emit({
       kind: 'error', pid: p.id, task: task.kind, secret: night, detail: lastErr,
-      text: night ? `${p.name} n'a pas répondu correctement cette nuit : action au hasard.` : `${p.name} n'a pas répondu correctement : action au hasard.`,
+      text: night ? `${p.name} n'a pas répondu à temps cette nuit : action au hasard.`
+        : task.kind === 'speech' ? `${p.name} n'a pas répondu à temps et passe son tour de parole.`
+        : task.kind === 'vote' || task.kind === 'mayor_vote' ? `${p.name} n'a pas répondu à temps : vote blanc.`
+        : `${p.name} n'a pas répondu à temps : choix au hasard.`,
     });
     const fb = task.fallback();
     fb._fallback = true;
@@ -477,19 +488,20 @@ Réponds en JSON : {
 ACTION — Élection du Maire : vote pour le joueur qui sera Maire (son vote comptera double ; tu peux voter pour toi). Votes simultanés, révélés ensemble.
 Réponds en JSON : {"pensee": "raisonnement privé, 1 à 2 phrases", "vote": numéro du joueur}`,
         validate: this.targetValidator(voters, 'vote'),
-        fallback: () => ({ pensee: '(hasard)', vote: this.pick(voters).id }),
+        fallback: () => ({ pensee: '(vote blanc)', vote: 0 }),
       });
       results.push({ p, o });
       this.emit({ kind: 'ballot', n: results.length, total: voters.length });
     }
     const tally = new Map();
-    for (const { o } of results) tally.set(o.vote, (tally.get(o.vote) || 0) + 1);
+    for (const { o } of results) if (o.vote) tally.set(o.vote, (tally.get(o.vote) || 0) + 1);
+    if (!tally.size) for (const p of voters) tally.set(p.id, 0);
     const max = Math.max(...tally.values());
     const top = [...tally.entries()].filter(([, n]) => n === max).map(([id]) => id);
     this.mayor = this.get(top.length === 1 ? top[0] : this.pick(top));
     const text = `${this.mayor.name} est élu Maire (${max} voix${top.length > 1 ? ', départagé au sort' : ''}). Son vote comptera double.`;
-    this.pub(`Votes pour le Maire : ${results.map(({ p, o }) => `${p.name} → ${this.get(o.vote).name}`).join(', ')}. ${text}`);
-    this.emit({ kind: 'mayor', votes: results.map(({ p, o }) => ({ from: p.id, to: o.vote, pensee: o.pensee, fallback: !!o._fallback })), elected: this.mayor.id, text });
+    this.pub(`Votes pour le Maire : ${results.map(({ p, o }) => `${p.name} → ${o.vote ? this.get(o.vote).name : 'vote blanc'}`).join(', ')}. ${text}`);
+    this.emit({ kind: 'mayor', votes: results.map(({ p, o }) => ({ from: p.id, to: o.vote || null, pensee: o.pensee, fallback: !!o._fallback })), elected: this.mayor.id, text });
   }
 
   async succession() {
@@ -521,6 +533,7 @@ Réponds en JSON : {"pensee": "raisonnement privé, 1 à 2 phrases", "cible": nu
       this.recordClaims(p, o);
       p.stats.speeches++;
     }
+    if (o._fallback) { this.pub(`${p.name} passe son tour de parole.`); return; } // l'écran l'annonce déjà par l'événement d'erreur
     this.say(p, message);
     this.emit({ kind: 'speech', pid: p.id, round, message, pensee: o.pensee, claims: o._claims || [], lies: o._lies || 0, fallback: !!o._fallback, leaks: red.leaks });
   }
@@ -657,7 +670,7 @@ Réponds en JSON : {
 ACTION — Vote du jour ${this.day} : désigne le joueur que tu veux éliminer (pas toi-même). Les votes sont simultanés puis rendus publics.${this.mayor === p ? ' Tu es Maire : ton vote compte double.' : ''}
 Réponds en JSON : {"pensee": "raisonnement privé, 1 à 3 phrases", "vote": numéro du joueur}`,
         validate: this.targetValidator(options, 'vote'),
-        fallback: () => ({ pensee: '(hasard)', vote: this.pick(options).id }),
+        fallback: () => ({ pensee: '(vote blanc)', vote: 0 }),
       }).then((o) => { done++; this.emit({ kind: 'ballot', n: done, total: voters.length }); return { p, o }; });
     };
     let results;
@@ -666,20 +679,22 @@ Réponds en JSON : {"pensee": "raisonnement privé, 1 à 3 phrases", "vote": num
 
     const tally = new Map();
     for (const { p, o } of results) {
+      if (o._fallback || !o.vote) continue;
       tally.set(o.vote, (tally.get(o.vote) || 0) + (this.mayor === p ? 2 : 1));
-      if (o._fallback) continue;
       p.stats.votes++;
       const target = this.get(o.vote);
       if (!this.isWolf(p) && this.isWolf(target)) p.stats.goodVotes++;
       if (this.isWolf(p) && !this.isWolf(target)) p.stats.goodVotes++;
     }
-    const votesTxt = results.map(({ p, o }) => `${p.name}${this.mayor === p ? ' (Maire, ×2)' : ''} → ${this.get(o.vote).name}`).join(', ');
+    const votesTxt = results.map(({ p, o }) => `${p.name}${this.mayor === p ? ' (Maire, ×2)' : ''} → ${o.vote ? this.get(o.vote).name : 'vote blanc'}`).join(', ');
     this.pub(`Votes du jour ${this.day} : ${votesTxt}.`);
-    const max = Math.max(...tally.values());
+    const max = tally.size ? Math.max(...tally.values()) : 0;
     const top = [...tally.entries()].filter(([, n]) => n === max).map(([id]) => id);
     let text;
     let eliminated = null;
-    if (top.length === 1) {
+    if (!top.length) {
+      text = 'Aucun vote exprimé : personne n\'est éliminé.';
+    } else if (top.length === 1) {
       eliminated = this.get(top[0]);
       this.kill(eliminated, 'vote');
       text = `Le village élimine ${eliminated.name} (${max} voix). C'était ${eliminated.role}.`;
@@ -687,7 +702,7 @@ Réponds en JSON : {"pensee": "raisonnement privé, 1 à 3 phrases", "vote": num
       text = `Égalité entre ${top.map((id) => this.get(id).name).join(' et ')} : personne n'est éliminé.`;
     }
     this.pub(text);
-    this.emit({ kind: 'vote', votes: results.map(({ p, o }) => ({ from: p.id, to: o.vote, weight: this.mayor === p ? 2 : 1, pensee: o.pensee, fallback: !!o._fallback })), eliminated: eliminated?.id ?? null, text });
+    this.emit({ kind: 'vote', votes: results.map(({ p, o }) => ({ from: p.id, to: o.vote || null, weight: this.mayor === p ? 2 : 1, pensee: o.pensee, fallback: !!o._fallback })), eliminated: eliminated?.id ?? null, text });
     if (eliminated) await this.succession();
   }
 
@@ -799,13 +814,13 @@ function aggregate(games) {
     for (const p of g.players) {
       if (p.provider === 'human') continue;
       const k = p.label;
-      if (!by.has(k)) by.set(k, { label: k, games: 0, wins: 0, wolfGames: 0, wolfWins: 0, villGames: 0, villWins: 0, survived: 0, days: 0, identityLeaks: 0, speeches: 0, claims: 0, lies: 0, votes: 0, goodVotes: 0, fallbacks: 0, roles: {} });
+      if (!by.has(k)) by.set(k, { label: k, games: 0, wins: 0, wolfGames: 0, wolfWins: 0, villGames: 0, villWins: 0, survived: 0, days: 0, identityLeaks: 0, speeches: 0, claims: 0, lies: 0, votes: 0, goodVotes: 0, fallbacks: 0, calls: 0, callMs: 0, timeouts: 0, roles: {} });
       const s = by.get(k);
       s.games++; if (p.won) s.wins++;
       if (p.team === 'loups') { s.wolfGames++; if (p.won) s.wolfWins++; } else { s.villGames++; if (p.won) s.villWins++; }
       if (p.alive) s.survived++;
       s.days += g.days ? p.survivedDays / g.days : 0;
-      for (const f of ['speeches', 'claims', 'lies', 'votes', 'goodVotes', 'fallbacks', 'identityLeaks']) s[f] += p.stats[f] || 0;
+      for (const f of ['speeches', 'claims', 'lies', 'votes', 'goodVotes', 'fallbacks', 'identityLeaks', 'calls', 'callMs', 'timeouts']) s[f] += p.stats[f] || 0;
       const r = (s.roles[p.role] ||= { games: 0, wins: 0 });
       r.games++; if (p.won) r.wins++;
     }

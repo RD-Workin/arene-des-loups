@@ -34,6 +34,7 @@
   config.n = Math.min(10, Math.max(5, Number(config.n) || 8));
   config.compo = config.compo || Engine.presetCompo(config.n);
   config.maxDays = config.maxDays || 10;
+  config.turnLimit = config.turnLimit || 45;
   function sanitizeSeats() {
     const s = Array.isArray(config.seats) ? config.seats.slice(0, config.n) : [];
     for (let i = 0; i < config.n; i++) if (!s[i] || !providerOk(s[i].provider)) s[i] = defaultSeat(i);
@@ -105,7 +106,7 @@
       if (seat.provider === 'openrouter') {
         m = el('select', 'model');
         const ids = config.roster.includes(seat.model) || !seat.model ? config.roster : [seat.model, ...config.roster];
-        for (const id of ids) { const o = el('option', null, modelName(id)); o.value = id; m.append(o); }
+        for (const id of ids) { const o = el('option', null, modelName(id) + (isFree(id) ? ` (${FREE_NOTE})` : '')); o.value = id; m.append(o); }
         m.value = seat.model;
         m.addEventListener('change', () => { config.seats[i].model = m.value; touch(); });
       } else if (seat.provider === 'claude') {
@@ -149,6 +150,7 @@
 
   $('rounds').addEventListener('change', (e) => { config.rounds = Number(e.target.value); saveConfig(); });
   $('maxdays').addEventListener('change', (e) => { config.maxDays = Number(e.target.value); saveConfig(); });
+  $('turn-limit').addEventListener('change', (e) => { config.turnLimit = Number(e.target.value); saveConfig(); });
   $('mayor').addEventListener('change', (e) => { config.mayor = e.target.checked; saveConfig(); });
   $('series-size').addEventListener('change', (e) => { config.seriesSize = Number(e.target.value); saveConfig(); $('memory-wrap').hidden = config.seriesSize < 2; });
   $('memory').addEventListener('change', (e) => { config.memory = Number(e.target.value); saveConfig(); });
@@ -156,6 +158,9 @@
   // ---------- Catalogue OpenRouter et « Mes IA » ----------
   let catalog = [];
   const modelName = (id) => catalog.find((m) => m.id === id)?.name || id;
+  // Les variantes « :free » d'OpenRouter sont plafonnées (requêtes par minute et par jour) : elles calent souvent.
+  const isFree = (id) => /:free$/.test(id || '');
+  const FREE_NOTE = 'gratuit, débit limité';
   const price = (m) => {
     const inp = Number(m.pricing?.prompt) * 1e6, out = Number(m.pricing?.completion) * 1e6;
     if (!isFinite(inp) || !isFinite(out)) return '';
@@ -182,7 +187,7 @@
     const ul = $('roster'); ul.textContent = '';
     for (const id of config.roster) {
       const li = el('li'); li.title = id;
-      const name = el('span', null, modelName(id));
+      const name = el('span', null, modelName(id)); if (isFree(id)) { li.classList.add('free'); li.title = `${id} : ${FREE_NOTE}`; }
       const rm = el('button', null, '×'); rm.type = 'button'; rm.setAttribute('aria-label', `Retirer ${modelName(id)}`);
       rm.addEventListener('click', () => {
         config.roster = config.roster.filter((x) => x !== id); touch(); renderRoster(); renderResults(); renderSeats();
@@ -202,6 +207,7 @@
     for (const m of hits) {
       const li = el('li');
       const info = el('div'); info.append(el('div', 'mname', m.name), el('div', 'mid', `${m.id}${price(m) ? ' · ' + price(m) : ''}`));
+      if (isFree(m.id)) info.append(el('div', 'warn-free', 'Gratuit mais limité par OpenRouter : il peut rester bloqué ou passer son tour en pleine partie.'));
       const added = config.roster.includes(m.id);
       const b = el('button', added ? 'ghost' : 'primary', added ? 'Ajoutée' : 'Ajouter'); b.type = 'button'; b.disabled = added;
       b.addEventListener('click', () => { config.roster.push(m.id); touch(); renderRoster(); renderResults(); renderSeats(); });
@@ -236,7 +242,8 @@
   // ---------- Appels aux modèles ----------
   // Toutes les requêtes en cours, pour pouvoir les annuler d'un coup (votes en parallèle).
   const inflight = new Set();
-  const TIMEOUT_MS = 60000;
+  // Une erreur « lente » : le joueur a épuisé son temps, la partie joue son action par défaut sans réessayer.
+  const slowErr = (m) => Object.assign(new Error(m), { slow: true });
   function newCtl() {
     const c = new AbortController(); inflight.add(c);
     c.done = () => { clearTimeout(c.timer); inflight.delete(c); };
@@ -246,12 +253,18 @@
 
   async function callOpenRouter(model, system, prompt, game) {
     const key = store.get('lga.key', '') || $('or-key').value.trim();
+    const limit = (game.turnLimit || 45) * 1000;
+    let deadline = Date.now() + limit;
+    const left = () => deadline - Date.now();
+    const wait = async (ms) => { if (left() < ms + 3000) throw slowErr(`pas de réponse en ${limit / 1000} s`); await sleep(ms); };
     let useFormat = true;
     let maxTokens = 2000;
     for (let i = 0; i < 4; i++) {
+      if (left() < 2000) throw slowErr(`pas de réponse en ${limit / 1000} s`);
       const ctl = newCtl();
       let timedOut = false;
-      ctl.timer = setTimeout(() => { timedOut = true; ctl.abort(); }, TIMEOUT_MS);
+      ctl.timer = setTimeout(() => { timedOut = true; ctl.abort(); }, left());
+      const t0 = Date.now();
       let res, data;
       try {
         res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -261,6 +274,8 @@
             model, temperature: 0.9, max_tokens: maxTokens, usage: { include: true },
             reasoning: { effort: 'low', exclude: true },
             messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
+            // Fournisseur le plus rapide disponible pour ce modèle.
+            provider: { sort: 'throughput' },
             ...(useFormat ? { response_format: { type: 'json_object' } } : {}),
           }),
         });
@@ -269,9 +284,9 @@
         ctl.done();
         if (game.stopped) throw e;
         // Safari en arrière-plan coupe les requêtes : on attend la reprise sans compter d'essai.
-        if (document.hidden || game.paused) { await game.gate(); i--; continue; }
-        if (timedOut) throw new Error('pas de réponse en 60 s');
-        if (i < 3) { await sleep(1500 * (i + 1)); continue; }
+        if (document.hidden || game.paused) { await game.gate(); deadline += Date.now() - t0; i--; continue; }
+        if (timedOut) throw slowErr(`pas de réponse en ${limit / 1000} s`);
+        if (i < 3) { await wait(1500 * (i + 1)); continue; }
         throw new Error('réseau injoignable');
       }
       ctl.done();
@@ -280,16 +295,17 @@
       if (res.status === 402) throw fatal('Crédit OpenRouter insuffisant pour continuer la partie.');
       if (res.status === 404 || /not a valid model|no endpoints found/i.test(msg)) throw fatal(`Modèle introuvable sur OpenRouter : ${model}`);
       if (res.status === 400 && useFormat) { useFormat = false; continue; }
-      if (res.status === 429 || res.status >= 500) { await sleep(2500 * (i + 1)); continue; }
+      if (res.status === 429 && (isFree(model) || /per-day|per day/i.test(msg))) throw slowErr('limite gratuite OpenRouter atteinte');
+      if (res.status === 429 || res.status >= 500) { await wait(2500 * (i + 1)); continue; }
       if (!res.ok) throw new Error(msg);
       game.cost = (game.cost || 0) + (data?.usage?.cost || 0);
       const choice = data?.choices?.[0];
       const c = choice?.message?.content;
-      if (!c && choice?.finish_reason === 'length' && maxTokens < 6000) { maxTokens = 6000; continue; }
+      if (!c && choice?.finish_reason === 'length' && maxTokens < 6000 && left() > 15000) { maxTokens = 6000; continue; }
       if (!c) throw new Error(data?.error?.message || 'réponse vide');
       return c;
     }
-    throw new Error('service surchargé');
+    throw slowErr('service surchargé');
   }
 
   async function callClaude(tier, system, prompt, game) {
@@ -309,7 +325,7 @@
         game.pause(); updatePause(); await game.gate();
         return run();
       }
-      if (e.code === 'cancelled' && !game.stopped) throw new Error('pas de réponse en 3 min');
+      if (e.code === 'cancelled' && !game.stopped) throw slowErr('pas de réponse en 3 min');
       throw new Error(e.message || e.code || 'erreur Claude');
     }
   }
@@ -335,6 +351,27 @@
 
   function setThinking(text) { $('thinking').hidden = !text; if (text) $('thinking-text').textContent = text; }
 
+  // Joueurs dont on attend la réponse, avec le temps écoulé : on voit qui traîne.
+  const pending = new Map();
+  let pendingTimer = null;
+  function refreshThinking() {
+    if (!pending.size) { setThinking(null); clearInterval(pendingTimer); pendingTimer = null; return; }
+    const list = [...pending.values()];
+    const first = list[0];
+    const s = Math.floor((Date.now() - first.t0) / 1000);
+    let text = thinkingText(first.p, first.task);
+    if (list.length > 1 && canReveal()) text += ` En attente de ${list.map((x) => x.p.name).join(', ')}.`;
+    else if (list.length > 1 && first.task.kind === 'vote') text = `Le village vote… ${list.length} bulletins attendus.`;
+    if (s >= 10) {
+      text += ` ${s} s`;
+      const slowest = list.reduce((a, b) => (a.t0 <= b.t0 ? a : b));
+      const who = slowest.p.seat.provider === 'openrouter' && canReveal() ? ` (${modelName(slowest.p.seat.model)})` : '';
+      if (s >= 20) text += ` · ${slowest.p.name}${who} est lent, limite ${game?.turnLimit || config.turnLimit} s`;
+    }
+    setThinking(text);
+    $('thinking').classList.toggle('slow', s >= 20);
+  }
+
   function thinkingText(p, task) {
     const r = canReveal();
     if (task.kind === 'speech') return `${p.name} prend la parole…`;
@@ -343,17 +380,22 @@
   }
 
   async function agent(p, task) {
-    setThinking(thinkingText(p, task));
+    const token = {};
+    if (p.seat.provider !== 'human') {
+      pending.set(token, { p, task, t0: Date.now() });
+      refreshThinking();
+      pendingTimer = pendingTimer || setInterval(refreshThinking, 1000);
+    }
     markSpeaking(task.kind === 'speech' ? p.id : null);
     try {
       switch (p.seat.provider) {
         case 'bot': await sleep(task.kind === 'speech' ? 500 : 150); return Engine.botAgent(p, task);
-        case 'human': setThinking(null); return await humanTurn(p, task);
+        case 'human': return await humanTurn(p, task);
         case 'openrouter': return await callOpenRouter(p.seat.model, task.system, task.prompt, task.game);
         case 'claude': return await callClaude(p.seat.model, task.system, task.prompt, task.game);
       }
       throw fatal('Fournisseur inconnu');
-    } finally { setThinking(null); }
+    } finally { pending.delete(token); refreshThinking(); }
   }
 
   function startError(msg) { const e = $('setup-error'); e.textContent = msg; e.hidden = !msg; if (msg) show('setup'); }
@@ -451,6 +493,9 @@
       });
     }
     game = snap ? Engine.Game.restore(snap, opts) : new Engine.Game(opts);
+    game.turnLimit = config.turnLimit;
+    const free = game.players.filter((p) => p.seat.provider === 'openrouter' && isFree(p.seat.model)).length;
+    if (free) banner(`${free} siège${free > 1 ? 's utilisent' : ' utilise'} un modèle gratuit (:free). OpenRouter limite fortement leur débit : attends-toi à des tours passés.`);
     human = game.players.find((p) => p.seat.provider === 'human') || null;
     if (snap) { rerenderFeed(); $('feed').append(el('li', 'ev narr', `Partie reprise au ${snap.next === 'day' ? 'jour' : 'début de la nuit'} ${snap.next === 'day' ? snap.day : snap.day + 1}.`)); }
     $('reveal').disabled = !!human;
@@ -623,11 +668,15 @@
       case 'ballot': return null;
       case 'mayor': case 'mayor_succession': {
         const li = el('li', 'ev narr vote'); li.append(el('div', null, ev.text));
-        if (ev.votes) { const log = el('ul', 'votelog'); for (const v of ev.votes) log.append(el('li', null, `J${v.from} → J${v.to}`)); li.append(log); }
+        if (ev.votes) { const log = el('ul', 'votelog'); for (const v of ev.votes) log.append(el('li', null, `J${v.from} → ${v.to ? `J${v.to}` : 'blanc'}`)); li.append(log); }
         return li;
       }
       case 'dawn': return el('li', 'ev narr', ev.text);
-      case 'error': return el('li', 'ev error', canReveal() && ev.detail ? `${ev.text} (${ev.detail})` : ev.text);
+      case 'error': {
+        const q = game?.get(ev.pid);
+        const mdl = q && q.seat.provider === 'openrouter' ? `${modelName(q.seat.model)}, ` : '';
+        return el('li', 'ev error', canReveal() && ev.detail ? `${ev.text} (${mdl}${ev.detail})` : ev.text);
+      }
       case 'end': { const li = el('li', 'ev narr'); li.append(el('strong', null, ev.text)); return li; }
       case 'wolf_chat': case 'wolf_decision': {
         const li = el('li', 'ev night');
@@ -662,8 +711,8 @@
         const li = el('li', 'ev narr vote');
         li.append(el('div', null, ev.text));
         const counts = new Map();
-        for (const v of ev.votes) counts.set(v.to, (counts.get(v.to) || 0) + (v.weight || 1));
-        const max = Math.max(...counts.values());
+        for (const v of ev.votes) if (v.to) counts.set(v.to, (counts.get(v.to) || 0) + (v.weight || 1));
+        const max = counts.size ? Math.max(...counts.values()) : 0;
         const tally = el('ul', 'tally');
         for (const [id, n] of [...counts.entries()].sort((a, b) => b[1] - a[1])) {
           const row = el('li'); if (n === max) row.classList.add('lead');
@@ -672,7 +721,7 @@
           tally.append(row);
         }
         const log = el('ul', 'votelog');
-        for (const v of ev.votes) log.append(el('li', null, `J${v.from}${v.weight > 1 ? ' ×2' : ''} → J${v.to}${v.fallback ? ' (hasard)' : ''}`));
+        for (const v of ev.votes) log.append(el('li', null, `J${v.from}${v.weight > 1 ? ' ×2' : ''} → ${v.to ? `J${v.to}` : 'blanc'}${v.fallback ? ' (pas de réponse)' : ''}`));
         li.append(tally, log);
         return li;
       }
@@ -883,7 +932,8 @@
       const win = el('td'); const bar = el('span', 'bar'); bar.style.width = `${Math.round((40 * s.wins) / s.games)}px`; win.append(bar, pct(s.wins, s.games));
       tr.append(name, el('td', null, String(s.games)), win,
         el('td', null, `${pct(s.wolfWins, s.wolfGames)} (${s.wolfGames})`), el('td', null, `${pct(s.villWins, s.villGames)} (${s.villGames})`),
-        el('td', null, pct(s.days, s.games)), el('td', null, s.speeches ? (s.lies / s.speeches).toFixed(2) : '–'), el('td', null, pct(s.goodVotes, s.votes)));
+        el('td', null, pct(s.days, s.games)), el('td', null, s.speeches ? (s.lies / s.speeches).toFixed(2) : '–'), el('td', null, pct(s.goodVotes, s.votes)),
+        el('td', null, s.calls ? `${(s.callMs / s.calls / 1000).toFixed(1)} s` : '–'), el('td', null, s.calls ? pct(s.fallbacks, s.calls) : '–'));
       tb.append(tr);
     }
     const roles = ['Loup-Garou', 'Voyante', 'Sorcière', 'Villageois'];
@@ -931,7 +981,7 @@
     if (freshConfig && envReady && !config.touched) config.seats = null;
     sanitizeSeats(); if (envReady) saveConfig();
     renderEnv(); renderCompo(); renderRoster(); renderSeats();
-    $('rounds').value = String(config.rounds); $('maxdays').value = String(config.maxDays);
+    $('rounds').value = String(config.rounds); $('maxdays').value = String(config.maxDays); $('turn-limit').value = String(config.turnLimit);
     $('mayor').checked = config.mayor; $('series-size').value = String(config.seriesSize); $('memory').value = String(config.memory);
     $('memory-wrap').hidden = config.seriesSize < 2;
     renderIdle();
