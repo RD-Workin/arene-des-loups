@@ -726,7 +726,7 @@ Réponds en JSON : {
  "pensee": "ton raisonnement privé, 1 à 3 phrases (jamais montré aux autres)",
  "message": "ce que tu dis publiquement",
  "role_annonce": "le rôle que ton message affirme que tu as (même si c'est faux), ou null si tu n'en annonces pas",
- "affirmations": [{"joueur": numéro, "role": "rôle que ton message attribue à ce joueur"}]
+ "affirmations": [] ou [{"joueur": numéro, "role": "rôle attribué"}] : une entrée par rôle que ton message attribue explicitement à un autre joueur, [] s'il n'en attribue aucun
 }`,
           validate: (obj) => (typeof obj.message === 'string' && obj.message.trim() ? null : '"message" manquant'),
           fallback: () => ({ pensee: '(silence)', message: '…', role_annonce: null, affirmations: [] }),
