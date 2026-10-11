@@ -1013,7 +1013,8 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
       byRole: Object.fromEntries(ROLES.map((r) => [r, { games: 0, wins: 0 }])),
       survivedToEnd: 0, survivalShare: [], deathCauses: { loups: 0, poison: 0, vote: 0 },
       speeches: 0, words: 0,
-      claims: 0, lies: 0, liesByTeam: { loups: 0, village: 0 }, speechesByTeam: { loups: 0, village: 0 },
+      claims: 0, lies: 0, liesByTeam: { loups: 0, village: 0 }, speechesByTeam: { loups: 0, village: 0 }, // débat seulement
+      presSpeeches: 0, presLies: 0, presLiesWolf: 0, presSpeechesWolf: 0,          // présentations avant le maire
       lieTypes: { faux_role: 0, fausse_accusation: 0, couverture: 0, autre: 0 },
       guesses: 0, goodGuesses: 0, wolfAccusations: 0, goodWolfAccusations: 0,
       villageVotes: 0, villageVotesOnWolf: 0, wolfVotes: 0, wolfVotesOnVillage: 0,
@@ -1137,7 +1138,11 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
           case 'speech': {
             const team = P.get(e.actor).team;
             const r = claimsBySeq.get(e.seq);
-            if (s) { s.speeches++; s.speechesByTeam[team]++; s.words += words(e.message); }
+            const pres = e.phase === 'mayor'; // présentations avant l'élection du maire, séparées du débat
+            if (s) {
+              s.speeches++; s.words += words(e.message);
+              if (pres) { s.presSpeeches++; if (team === 'loups') s.presSpeechesWolf++; } else s.speechesByTeam[team]++;
+            }
             if (s && !P.get(e.actor).stats) s.identityLeaks += e.leaks || 0;
             for (const c of r ? r.claims : []) {
               if (c.role === WOLF && !c.self) {
@@ -1146,7 +1151,10 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
               }
               if (!s) continue;
               s.claims++;
-              if (c.verdict === 'mensonge') { s.lies++; s.liesByTeam[team]++; s.lieTypes[c.lieType]++; liedIn.add(e.actor); }
+              if (c.verdict === 'mensonge') {
+                s.lies++; s.lieTypes[c.lieType]++; liedIn.add(e.actor);
+                if (pres) { s.presLies++; if (team === 'loups') s.presLiesWolf++; } else s.liesByTeam[team]++;
+              }
               if (c.verdict.startsWith('supposition')) { s.guesses++; if (c.verdict === 'supposition_juste') s.goodGuesses++; }
               if (c.role === WOLF && !c.self && c.verdict !== 'mensonge') {
                 s.wolfAccusations++; if (c.truth === WOLF) s.goodWolfAccusations++;
@@ -1348,7 +1356,8 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
       lies: {
         claims: s.claims,
         total: s.lies,
-        perSpeech: ratio(s.lies, s.speeches),
+        perSpeech: ratio(s.lies - s.presLies, s.speeches - s.presSpeeches), // débat
+        presentation: { speeches: s.presSpeeches, lies: s.presLies, perSpeech: ratio(s.presLies, s.presSpeeches), perSpeechAsWolf: ratio(s.presLiesWolf, s.presSpeechesWolf) },
         perSpeechAsWolf: ratio(s.liesByTeam.loups, s.speechesByTeam.loups),
         perSpeechAsVillage: ratio(s.liesByTeam.village, s.speechesByTeam.village),
         types: s.lieTypes,
@@ -1435,7 +1444,7 @@ Réponds uniquement avec un objet JSON valide.`;
       else if (e.type === 'mayor_elected') lines.push(`[Élection du maire] Élu : ${e.target ? name(e.target) : 'personne'}`);
       else if (e.type === 'witch') lines.push(`[Nuit ${e.day}] (secret) Sorcière ${name(e.actor)} : ${e.saved ? 'sauve' : 'ne sauve pas'} ${e.attacked ? name(e.attacked) : ''}${e.poison ? `, empoisonne ${name(e.poison)}` : ''}.`);
       else if (e.type === 'dawn') lines.push(`[Aube ${e.day}] Morts : ${(e.dead || []).map((d) => `${name(d.pid)} (${d.role})`).join(', ') || 'aucun'}.`);
-      else if (e.type === 'speech') lines.push(`#${e.seq} [${e.phase === 'mayor' ? 'Campagne du maire' : `Jour ${e.day}`}] ${name(e.actor)} dit : « ${e.message} »${e.thought ? `  (pensée privée : ${e.thought})` : ''}`);
+      else if (e.type === 'speech') lines.push(`#${e.seq} [${e.phase === 'mayor' ? 'Présentations' : `Jour ${e.day}`}] ${name(e.actor)} dit : « ${e.message} »${e.thought ? `  (pensée privée : ${e.thought})` : ''}`);
       else if (e.type === 'vote') lines.push(`[Vote ${e.day}] ${name(e.actor)} → ${e.target != null ? name(e.target) : 'vote blanc'}`);
       else if (e.type === 'elimination') lines.push(`[Vote ${e.day}] Éliminé : ${e.target ? `${name(e.target)} (${e.role})` : 'personne (égalité)'}`);
     }
@@ -1707,7 +1716,7 @@ Réponds en JSON : {"scores": [{"seq": numéro, "logique": n, "persuasion": n, "
     { key: 'village', name: 'Au village', desc: 'Victoires dans le camp du Village : la déduction collective.', fmt: pct, max: 1, get: (x) => ({ v: x.village.rate, ci: x.village.ci, n: x.village.n }) },
     { key: 'votes', name: 'Votes justes', desc: 'Part des votes d\'un villageois qui visent un vrai loup (votes blancs exclus).', fmt: pct, max: 1, get: (x) => ({ v: x.deduction.villageVoteAccuracy }) },
     { key: 'persuasion', name: 'Persuasion', desc: 'Quand le modèle accuse quelqu\'un, part des autres votants qui le suivent le jour même.', fmt: pct, max: 1, get: (x) => ({ v: x.persuasion }) },
-    { key: 'lies', name: 'Mensonges', desc: 'Mensonges détectés par prise de parole quand le modèle est loup. Ni bien ni mal en soi.', fmt: (v) => num(v, 2), get: (x) => ({ v: x.lies.perSpeechAsWolf, n: x.lies.claims }) },
+    { key: 'lies', name: 'Mensonges', desc: 'Mensonges détectés par prise de parole pendant le débat, quand le modèle est loup (présentations à part). Ni bien ni mal en soi.', fmt: (v) => num(v, 2), get: (x) => ({ v: x.lies.perSpeechAsWolf, n: x.lies.claims }) },
     { key: 'stealth', name: 'Discrétion', desc: 'Voix reçues par jour de vote quand le modèle est loup. Plus bas = mieux caché.', fmt: (v) => num(v, 2), lowerBetter: true, get: (x) => ({ v: x.pressure.votesReceivedAsWolf }) },
     { key: 'survival', name: 'Survie', desc: 'Part moyenne de la partie passée en vie.', fmt: pct, max: 1, get: (x) => ({ v: x.survival.share }) },
     { key: 'mayor', name: 'Élu maire', desc: 'Part des élections du maire remportées : la confiance inspirée dès le départ.', fmt: pct, max: 1, get: (x) => ({ v: x.mayor.electedRate, ci: A.wilson(x.mayor.elected, x.mayor.games), n: x.mayor.games }) },
@@ -1975,7 +1984,9 @@ Réponds en JSON : {"scores": [{"seq": numéro, "logique": n, "persuasion": n, "
       <section class="lgs-card"><h3>Mensonges</h3><div class="lgs-grid2">
         ${stat('Par discours en loup', num(m.lies.perSpeechAsWolf, 2))}${stat('Par discours au village', num(m.lies.perSpeechAsVillage, 2))}
         ${stat('Faux rôle annoncé', L.faux_role)}${stat('Fausse accusation', L.fausse_accusation)}
-        ${stat('Couvre un loup', L.couverture)}${stat('Gagne après avoir menti', pct(m.lies.wolfLiedWinRate))}</div>
+        ${stat('Couvre un loup', L.couverture)}${stat('Gagne après avoir menti', pct(m.lies.wolfLiedWinRate))}
+        ${stat('Présentations (loup)', num(m.lies.presentation.perSpeechAsWolf, 2))}${stat('Présentations (tous)', num(m.lies.presentation.perSpeech, 2))}</div>
+        <p class="lgs-hint">Les chiffres « par discours » portent sur le débat ; les présentations avant l'élection du maire sont comptées à part.</p>
         ${quotes.length ? `<h4>Exemples tirés des parties</h4>${quotes.join('')}` : ''}</section>
       <section class="lgs-card"><h3>Rivalités</h3><div class="lgs-cols">
         <div><h4>Vise le plus</h4><ul class="lgs-rivals">${targets.map((x) => `<li><span>${esc(short(x.l))}</span><span class="lgs-mono">${pct(x.r)}</span></li>`).join('') || '<li class="dim">–</li>'}</ul></div>

@@ -178,7 +178,7 @@
     { key: 'village', name: 'Au village', desc: 'Victoires dans le camp du Village : la déduction collective.', fmt: pct, max: 1, get: (x) => ({ v: x.village.rate, ci: x.village.ci, n: x.village.n }) },
     { key: 'votes', name: 'Votes justes', desc: 'Part des votes d\'un villageois qui visent un vrai loup (votes blancs exclus).', fmt: pct, max: 1, get: (x) => ({ v: x.deduction.villageVoteAccuracy }) },
     { key: 'persuasion', name: 'Persuasion', desc: 'Quand le modèle accuse quelqu\'un, part des autres votants qui le suivent le jour même.', fmt: pct, max: 1, get: (x) => ({ v: x.persuasion }) },
-    { key: 'lies', name: 'Mensonges', desc: 'Mensonges détectés par prise de parole quand le modèle est loup. Ni bien ni mal en soi.', fmt: (v) => num(v, 2), get: (x) => ({ v: x.lies.perSpeechAsWolf, n: x.lies.claims }) },
+    { key: 'lies', name: 'Mensonges', desc: 'Mensonges détectés par prise de parole pendant le débat, quand le modèle est loup (présentations à part). Ni bien ni mal en soi.', fmt: (v) => num(v, 2), get: (x) => ({ v: x.lies.perSpeechAsWolf, n: x.lies.claims }) },
     { key: 'stealth', name: 'Discrétion', desc: 'Voix reçues par jour de vote quand le modèle est loup. Plus bas = mieux caché.', fmt: (v) => num(v, 2), lowerBetter: true, get: (x) => ({ v: x.pressure.votesReceivedAsWolf }) },
     { key: 'survival', name: 'Survie', desc: 'Part moyenne de la partie passée en vie.', fmt: pct, max: 1, get: (x) => ({ v: x.survival.share }) },
     { key: 'mayor', name: 'Élu maire', desc: 'Part des élections du maire remportées : la confiance inspirée dès le départ.', fmt: pct, max: 1, get: (x) => ({ v: x.mayor.electedRate, ci: A.wilson(x.mayor.elected, x.mayor.games), n: x.mayor.games }) },
@@ -446,7 +446,9 @@
       <section class="lgs-card"><h3>Mensonges</h3><div class="lgs-grid2">
         ${stat('Par discours en loup', num(m.lies.perSpeechAsWolf, 2))}${stat('Par discours au village', num(m.lies.perSpeechAsVillage, 2))}
         ${stat('Faux rôle annoncé', L.faux_role)}${stat('Fausse accusation', L.fausse_accusation)}
-        ${stat('Couvre un loup', L.couverture)}${stat('Gagne après avoir menti', pct(m.lies.wolfLiedWinRate))}</div>
+        ${stat('Couvre un loup', L.couverture)}${stat('Gagne après avoir menti', pct(m.lies.wolfLiedWinRate))}
+        ${stat('Présentations (loup)', num(m.lies.presentation.perSpeechAsWolf, 2))}${stat('Présentations (tous)', num(m.lies.presentation.perSpeech, 2))}</div>
+        <p class="lgs-hint">Les chiffres « par discours » portent sur le débat ; les présentations avant l'élection du maire sont comptées à part.</p>
         ${quotes.length ? `<h4>Exemples tirés des parties</h4>${quotes.join('')}` : ''}</section>
       <section class="lgs-card"><h3>Rivalités</h3><div class="lgs-cols">
         <div><h4>Vise le plus</h4><ul class="lgs-rivals">${targets.map((x) => `<li><span>${esc(short(x.l))}</span><span class="lgs-mono">${pct(x.r)}</span></li>`).join('') || '<li class="dim">–</li>'}</ul></div>

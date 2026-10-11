@@ -271,7 +271,8 @@
       byRole: Object.fromEntries(ROLES.map((r) => [r, { games: 0, wins: 0 }])),
       survivedToEnd: 0, survivalShare: [], deathCauses: { loups: 0, poison: 0, vote: 0 },
       speeches: 0, words: 0,
-      claims: 0, lies: 0, liesByTeam: { loups: 0, village: 0 }, speechesByTeam: { loups: 0, village: 0 },
+      claims: 0, lies: 0, liesByTeam: { loups: 0, village: 0 }, speechesByTeam: { loups: 0, village: 0 }, // débat seulement
+      presSpeeches: 0, presLies: 0, presLiesWolf: 0, presSpeechesWolf: 0,          // présentations avant le maire
       lieTypes: { faux_role: 0, fausse_accusation: 0, couverture: 0, autre: 0 },
       guesses: 0, goodGuesses: 0, wolfAccusations: 0, goodWolfAccusations: 0,
       villageVotes: 0, villageVotesOnWolf: 0, wolfVotes: 0, wolfVotesOnVillage: 0,
@@ -395,7 +396,11 @@
           case 'speech': {
             const team = P.get(e.actor).team;
             const r = claimsBySeq.get(e.seq);
-            if (s) { s.speeches++; s.speechesByTeam[team]++; s.words += words(e.message); }
+            const pres = e.phase === 'mayor'; // présentations avant l'élection du maire, séparées du débat
+            if (s) {
+              s.speeches++; s.words += words(e.message);
+              if (pres) { s.presSpeeches++; if (team === 'loups') s.presSpeechesWolf++; } else s.speechesByTeam[team]++;
+            }
             if (s && !P.get(e.actor).stats) s.identityLeaks += e.leaks || 0;
             for (const c of r ? r.claims : []) {
               if (c.role === WOLF && !c.self) {
@@ -404,7 +409,10 @@
               }
               if (!s) continue;
               s.claims++;
-              if (c.verdict === 'mensonge') { s.lies++; s.liesByTeam[team]++; s.lieTypes[c.lieType]++; liedIn.add(e.actor); }
+              if (c.verdict === 'mensonge') {
+                s.lies++; s.lieTypes[c.lieType]++; liedIn.add(e.actor);
+                if (pres) { s.presLies++; if (team === 'loups') s.presLiesWolf++; } else s.liesByTeam[team]++;
+              }
               if (c.verdict.startsWith('supposition')) { s.guesses++; if (c.verdict === 'supposition_juste') s.goodGuesses++; }
               if (c.role === WOLF && !c.self && c.verdict !== 'mensonge') {
                 s.wolfAccusations++; if (c.truth === WOLF) s.goodWolfAccusations++;
@@ -606,7 +614,8 @@
       lies: {
         claims: s.claims,
         total: s.lies,
-        perSpeech: ratio(s.lies, s.speeches),
+        perSpeech: ratio(s.lies - s.presLies, s.speeches - s.presSpeeches), // débat
+        presentation: { speeches: s.presSpeeches, lies: s.presLies, perSpeech: ratio(s.presLies, s.presSpeeches), perSpeechAsWolf: ratio(s.presLiesWolf, s.presSpeechesWolf) },
         perSpeechAsWolf: ratio(s.liesByTeam.loups, s.speechesByTeam.loups),
         perSpeechAsVillage: ratio(s.liesByTeam.village, s.speechesByTeam.village),
         types: s.lieTypes,
@@ -693,7 +702,7 @@ Réponds uniquement avec un objet JSON valide.`;
       else if (e.type === 'mayor_elected') lines.push(`[Élection du maire] Élu : ${e.target ? name(e.target) : 'personne'}`);
       else if (e.type === 'witch') lines.push(`[Nuit ${e.day}] (secret) Sorcière ${name(e.actor)} : ${e.saved ? 'sauve' : 'ne sauve pas'} ${e.attacked ? name(e.attacked) : ''}${e.poison ? `, empoisonne ${name(e.poison)}` : ''}.`);
       else if (e.type === 'dawn') lines.push(`[Aube ${e.day}] Morts : ${(e.dead || []).map((d) => `${name(d.pid)} (${d.role})`).join(', ') || 'aucun'}.`);
-      else if (e.type === 'speech') lines.push(`#${e.seq} [${e.phase === 'mayor' ? 'Campagne du maire' : `Jour ${e.day}`}] ${name(e.actor)} dit : « ${e.message} »${e.thought ? `  (pensée privée : ${e.thought})` : ''}`);
+      else if (e.type === 'speech') lines.push(`#${e.seq} [${e.phase === 'mayor' ? 'Présentations' : `Jour ${e.day}`}] ${name(e.actor)} dit : « ${e.message} »${e.thought ? `  (pensée privée : ${e.thought})` : ''}`);
       else if (e.type === 'vote') lines.push(`[Vote ${e.day}] ${name(e.actor)} → ${e.target != null ? name(e.target) : 'vote blanc'}`);
       else if (e.type === 'elimination') lines.push(`[Vote ${e.day}] Éliminé : ${e.target ? `${name(e.target)} (${e.role})` : 'personne (égalité)'}`);
     }
