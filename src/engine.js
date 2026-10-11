@@ -45,7 +45,7 @@ function cleanSpeech(s) {
 }
 
 // Noms de modèles ou de fournisseurs : caviardés pour préserver l'anonymat.
-const IDENTITY_RE = /(?<![\p{L}\p{N}])(?:(?<![\p{L}\p{N}-])claude(?:[\s-]*\d[\w.]*)?(?:[\s-]*(?:sonnet|opus|haiku))?(?![\p{L}])|anthropic|chat-?gpt|gpt[\w.-]*|o[134](?:-mini)?(?![\p{L}\p{N}])|openai|gemini[\w.-]*|gemma[\w.-]*|google|llama[\w.-]*|meta(?: ai)?(?![\p{L}\p{N}-])|mistral[\w.-]*|mixtral[\w.-]*|deepseek[\w.-]*|qwen[\w.-]*|grok[\w.-]*|xai(?![\p{L}\p{N}])|x\.ai|en tant qu[’'](?:ia|assistant|intelligence artificielle|modèle|modele)(?: de langage)?|(?:grand )?modèle de langage|as an ai(?: language model)?|(?:large )?language model|llm(?![\p{L}\p{N}]))/giu;
+const IDENTITY_RE = /(?<![\p{L}\p{N}])(?:(?<![\p{L}\p{N}-])claude(?:[\s-]*\d[\w.]*)?(?:[\s-]*(?:sonnet|opus|haiku))?(?![\p{L}])|anthropic|chat-?gpt|gpt[\w.-]*|o[134](?:-mini)?(?![\p{L}\p{N}])|openai|gemini[\w.-]*(?:[\s-]*\d[\w.]*)?(?:[\s-]*(?:pro|flash|ultra|nano|lite)(?![\p{L}]))*|gemma[\w.-]*|google|llama[\w.-]*(?:[\s-]*\d[\w.]*)?(?:[\s-]*\d+b(?![\p{L}]))?|(?<![\p{L}\p{N}])(?:opus|sonnet|haiku)[\s-]+\d[\w.]*|meta(?: ai)?(?![\p{L}\p{N}-])|mistral[\w.-]*|mixtral[\w.-]*|deepseek[\w.-]*|qwen[\w.-]*|grok[\w.-]*|xai(?![\p{L}\p{N}])|x\.ai|en tant qu[’'](?:ia|assistant|intelligence artificielle|modèle|modele)(?: de langage)?|(?:grand )?modèle de langage|as an ai(?: language model)?|(?:large )?language model|llm(?![\p{L}\p{N}]))/giu;
 function redactIdentity(s) {
   let n = 0;
   const out = s.replace(IDENTITY_RE, () => { n++; return '[…]'; });
@@ -90,18 +90,40 @@ function repairJson(s) {
 function parseJsonLoose(text) {
   if (text && typeof text === 'object') return text;
   if (typeof text !== 'string') throw new Error('Réponse vide');
-  let s = text.replace(/<(think|thinking|reasoning)>[\s\S]*?<\/\1>/gi, '').trim();
+  // Raisonnement visible : bloc fermé retiré ; bloc ouvert (réponse coupée) ignoré jusqu'au premier objet.
+  let s = text.replace(/<(think|thinking|reasoning)>[\s\S]*?<\/\1>/gi, '').replace(/<\/?(think|thinking|reasoning)>/gi, ' ').trim();
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)(?:```|$)/i);
   if (fence && fence[1].includes('{')) s = fence[1].trim();
-  try { return JSON.parse(s); } catch (_) { /* on tente l'extraction */ }
-  const a = s.indexOf('{');
-  if (a < 0) throw new Error('JSON introuvable dans la réponse');
-  const b = s.lastIndexOf('}');
-  const body = b > a ? s.slice(a, b + 1) : s.slice(a);
-  for (const cand of [body, repairJson(body), repairJson(s.slice(a))]) {
-    try { const o = JSON.parse(cand); if (o && typeof o === 'object') return o; } catch (_) { /* suivant */ }
+  try { const o = JSON.parse(s); if (o && typeof o === 'object' && !Array.isArray(o)) return o; if (Array.isArray(o) && o[0] && typeof o[0] === 'object') return o[0]; } catch (_) { /* on tente l'extraction */ }
+  if (s.indexOf('{') < 0) throw new Error('JSON introuvable dans la réponse');
+  const tryParse = (c) => { try { const o = JSON.parse(c); return o && typeof o === 'object' && !Array.isArray(o) ? o : null; } catch (_) { return null; } };
+  // Chaque « { » est un départ possible : la prose avec accolades ({pour}) ou un second objet ne gênent plus.
+  const starts = [];
+  for (let i = s.indexOf('{'); i >= 0 && starts.length < 12; i = s.indexOf('{', i + 1)) starts.push(i);
+  for (const a of starts) {
+    const end = balancedEnd(s, a);
+    const body = end > a ? s.slice(a, end + 1) : s.slice(a);
+    for (const cand of [body, repairJson(body)]) { const o = tryParse(cand); if (o) return o; }
   }
+  // Derniers recours : guillemets typographiques, commentaires, apostrophes simples.
+  const a = starts[0], b = s.lastIndexOf('}');
+  const raw = b > a ? s.slice(a, b + 1) : s.slice(a);
+  const loose = raw.replace(/[\u201c\u201d\u00ab\u00bb]/g, '"').replace(/^\s*\/\/.*$/gm, '').replace(/([,{\s])\/\/[^\n"]*$/gm, '$1');
+  for (const cand of [repairJson(loose), repairJson(loose.replace(/'([^'\n]*)'(\s*[:,}\]])/g, '"$1"$2'))]) { const o = tryParse(cand); if (o) return o; }
   throw new Error('JSON illisible dans la réponse');
+}
+
+// Fin de l'objet qui commence en a (accolades équilibrées, chaînes respectées) ; -1 s'il n'est pas fermé.
+function balancedEnd(s, a) {
+  let depth = 0, inStr = false;
+  for (let i = a; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) { if (c === '\\') i++; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return i;
+  }
+  return -1;
 }
 
 function toPlayerNum(v) {
@@ -614,7 +636,7 @@ Réponds en JSON : {"pensee": "raisonnement privé, 1 à 2 phrases", "cible": nu
     }
     if (o._fallback) { this.pub(`${p.name} passe son tour de parole.`); return; } // l'écran l'annonce déjà par l'événement d'erreur
     this.say(p, message);
-    this.emit({ kind: 'speech', pid: p.id, round, message, pensee: o.pensee, claims: o._claims || [], lies: o._lies || 0, fallback: !!o._fallback, leaks: red.leaks });
+    this.emit({ kind: 'speech', pid: p.id, round, phase: this.phase, message, pensee: o.pensee, claims: o._claims || [], lies: o._lies || 0, fallback: !!o._fallback, leaks: red.leaks });
   }
 
   async padTurn() {

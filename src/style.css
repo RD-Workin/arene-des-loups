@@ -351,3 +351,5 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
 .mcard b { font-size: 1.05rem; }
 .mcard .mlast { margin: 4px 0 0; font-size: .84rem; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 #game.in-mosaic > :not(#tables):not(#mosaic) { display: none !important; }
+/* QA : avec 8 à 10 cibles, « Valider » sortait du panneau sur iPhone ; il reste collé en bas. */
+.sheet.fixed #human-send { position: sticky; bottom: 0; z-index: 1; box-shadow: 0 -10px 14px var(--surface), 0 8px 0 8px var(--surface); }

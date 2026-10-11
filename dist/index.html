@@ -366,6 +366,8 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
 .mcard b { font-size: 1.05rem; }
 .mcard .mlast { margin: 4px 0 0; font-size: .84rem; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 #game.in-mosaic > :not(#tables):not(#mosaic) { display: none !important; }
+/* QA : avec 8 à 10 cibles, « Valider » sortait du panneau sur iPhone ; il reste collé en bas. */
+.sheet.fixed #human-send { position: sticky; bottom: 0; z-index: 1; box-shadow: 0 -10px 14px var(--surface), 0 8px 0 8px var(--surface); }
 
 /* Icônes de l'Arène des Loups. Fichier généré par design/icons/build-icons.js : ne pas éditer à la main.
    Les règles viennent de design/icons/icons.rules.css. Aucune ressource externe, aucun logo de fournisseur. */
@@ -2231,7 +2233,7 @@ function cleanSpeech(s) {
 }
 
 // Noms de modèles ou de fournisseurs : caviardés pour préserver l'anonymat.
-const IDENTITY_RE = /(?<![\p{L}\p{N}])(?:(?<![\p{L}\p{N}-])claude(?:[\s-]*\d[\w.]*)?(?:[\s-]*(?:sonnet|opus|haiku))?(?![\p{L}])|anthropic|chat-?gpt|gpt[\w.-]*|o[134](?:-mini)?(?![\p{L}\p{N}])|openai|gemini[\w.-]*|gemma[\w.-]*|google|llama[\w.-]*|meta(?: ai)?(?![\p{L}\p{N}-])|mistral[\w.-]*|mixtral[\w.-]*|deepseek[\w.-]*|qwen[\w.-]*|grok[\w.-]*|xai(?![\p{L}\p{N}])|x\.ai|en tant qu[’'](?:ia|assistant|intelligence artificielle|modèle|modele)(?: de langage)?|(?:grand )?modèle de langage|as an ai(?: language model)?|(?:large )?language model|llm(?![\p{L}\p{N}]))/giu;
+const IDENTITY_RE = /(?<![\p{L}\p{N}])(?:(?<![\p{L}\p{N}-])claude(?:[\s-]*\d[\w.]*)?(?:[\s-]*(?:sonnet|opus|haiku))?(?![\p{L}])|anthropic|chat-?gpt|gpt[\w.-]*|o[134](?:-mini)?(?![\p{L}\p{N}])|openai|gemini[\w.-]*(?:[\s-]*\d[\w.]*)?(?:[\s-]*(?:pro|flash|ultra|nano|lite)(?![\p{L}]))*|gemma[\w.-]*|google|llama[\w.-]*(?:[\s-]*\d[\w.]*)?(?:[\s-]*\d+b(?![\p{L}]))?|(?<![\p{L}\p{N}])(?:opus|sonnet|haiku)[\s-]+\d[\w.]*|meta(?: ai)?(?![\p{L}\p{N}-])|mistral[\w.-]*|mixtral[\w.-]*|deepseek[\w.-]*|qwen[\w.-]*|grok[\w.-]*|xai(?![\p{L}\p{N}])|x\.ai|en tant qu[’'](?:ia|assistant|intelligence artificielle|modèle|modele)(?: de langage)?|(?:grand )?modèle de langage|as an ai(?: language model)?|(?:large )?language model|llm(?![\p{L}\p{N}]))/giu;
 function redactIdentity(s) {
   let n = 0;
   const out = s.replace(IDENTITY_RE, () => { n++; return '[…]'; });
@@ -2276,18 +2278,40 @@ function repairJson(s) {
 function parseJsonLoose(text) {
   if (text && typeof text === 'object') return text;
   if (typeof text !== 'string') throw new Error('Réponse vide');
-  let s = text.replace(/<(think|thinking|reasoning)>[\s\S]*?<\/\1>/gi, '').trim();
+  // Raisonnement visible : bloc fermé retiré ; bloc ouvert (réponse coupée) ignoré jusqu'au premier objet.
+  let s = text.replace(/<(think|thinking|reasoning)>[\s\S]*?<\/\1>/gi, '').replace(/<\/?(think|thinking|reasoning)>/gi, ' ').trim();
   const fence = s.match(/```(?:json)?\s*([\s\S]*?)(?:```|$)/i);
   if (fence && fence[1].includes('{')) s = fence[1].trim();
-  try { return JSON.parse(s); } catch (_) { /* on tente l'extraction */ }
-  const a = s.indexOf('{');
-  if (a < 0) throw new Error('JSON introuvable dans la réponse');
-  const b = s.lastIndexOf('}');
-  const body = b > a ? s.slice(a, b + 1) : s.slice(a);
-  for (const cand of [body, repairJson(body), repairJson(s.slice(a))]) {
-    try { const o = JSON.parse(cand); if (o && typeof o === 'object') return o; } catch (_) { /* suivant */ }
+  try { const o = JSON.parse(s); if (o && typeof o === 'object' && !Array.isArray(o)) return o; if (Array.isArray(o) && o[0] && typeof o[0] === 'object') return o[0]; } catch (_) { /* on tente l'extraction */ }
+  if (s.indexOf('{') < 0) throw new Error('JSON introuvable dans la réponse');
+  const tryParse = (c) => { try { const o = JSON.parse(c); return o && typeof o === 'object' && !Array.isArray(o) ? o : null; } catch (_) { return null; } };
+  // Chaque « { » est un départ possible : la prose avec accolades ({pour}) ou un second objet ne gênent plus.
+  const starts = [];
+  for (let i = s.indexOf('{'); i >= 0 && starts.length < 12; i = s.indexOf('{', i + 1)) starts.push(i);
+  for (const a of starts) {
+    const end = balancedEnd(s, a);
+    const body = end > a ? s.slice(a, end + 1) : s.slice(a);
+    for (const cand of [body, repairJson(body)]) { const o = tryParse(cand); if (o) return o; }
   }
+  // Derniers recours : guillemets typographiques, commentaires, apostrophes simples.
+  const a = starts[0], b = s.lastIndexOf('}');
+  const raw = b > a ? s.slice(a, b + 1) : s.slice(a);
+  const loose = raw.replace(/[\u201c\u201d\u00ab\u00bb]/g, '"').replace(/^\s*\/\/.*$/gm, '').replace(/([,{\s])\/\/[^\n"]*$/gm, '$1');
+  for (const cand of [repairJson(loose), repairJson(loose.replace(/'([^'\n]*)'(\s*[:,}\]])/g, '"$1"$2'))]) { const o = tryParse(cand); if (o) return o; }
   throw new Error('JSON illisible dans la réponse');
+}
+
+// Fin de l'objet qui commence en a (accolades équilibrées, chaînes respectées) ; -1 s'il n'est pas fermé.
+function balancedEnd(s, a) {
+  let depth = 0, inStr = false;
+  for (let i = a; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) { if (c === '\\') i++; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return i;
+  }
+  return -1;
 }
 
 function toPlayerNum(v) {
@@ -2800,7 +2824,7 @@ Réponds en JSON : {"pensee": "raisonnement privé, 1 à 2 phrases", "cible": nu
     }
     if (o._fallback) { this.pub(`${p.name} passe son tour de parole.`); return; } // l'écran l'annonce déjà par l'événement d'erreur
     this.say(p, message);
-    this.emit({ kind: 'speech', pid: p.id, round, message, pensee: o.pensee, claims: o._claims || [], lies: o._lies || 0, fallback: !!o._fallback, leaks: red.leaks });
+    this.emit({ kind: 'speech', pid: p.id, round, phase: this.phase, message, pensee: o.pensee, claims: o._claims || [], lies: o._lies || 0, fallback: !!o._fallback, leaks: red.leaks });
   }
 
   async padTurn() {
@@ -3446,13 +3470,23 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     set.clear();
   }
 
+  // Modèles qui refusent response_format : retenus pour ne pas payer un aller-retour 400 à chaque appel.
+  const noJsonMode = new Set();
+  // Onglet caché (Safari en arrière-plan) : la partie se met en pause au lieu de réessayer en boucle.
+  function holdWhileHidden(game) {
+    if (document.hidden && !game.paused && !game.stopped) {
+      game.pause();
+      const t = tableOf(game); if (t) t.autoPaused = true;
+      updatePause(); renderTabs();
+    }
+  }
   async function callOpenRouter(model, system, prompt, game) {
     const key = store.get('lga.key', '') || $('or-key').value.trim();
     const limit = (game.turnLimit || 45) * 1000;
     let deadline = Date.now() + limit;
     const left = () => deadline - Date.now();
     const wait = async (ms) => { if (left() < ms + 3000) throw slowErr(`pas de réponse en ${limit / 1000} s`); await sleep(ms); };
-    let useFormat = true;
+    let useFormat = !noJsonMode.has(model);
     let maxTokens = 2000;
     for (let i = 0; i < 4; i++) {
       if (left() < 2000) throw slowErr(`pas de réponse en ${limit / 1000} s`);
@@ -3479,7 +3513,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
         ctl.done();
         if (game.stopped) throw e;
         // Safari en arrière-plan coupe les requêtes : on attend la reprise sans compter d'essai.
-        if (document.hidden || game.paused) { await game.gate(); deadline += Date.now() - t0; i--; continue; }
+        if (document.hidden || game.paused) { holdWhileHidden(game); await game.gate(); deadline += Date.now() - t0; i--; continue; }
         if (timedOut) throw slowErr(`pas de réponse en ${limit / 1000} s`);
         if (i < 3) { await wait(1500 * (i + 1)); continue; }
         throw new Error('réseau injoignable');
@@ -3490,7 +3524,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
       if (res.status === 402) throw fatal('Crédit OpenRouter insuffisant pour continuer la partie.');
       if (res.status === 404 || /not a valid model|no endpoints found/i.test(msg)) throw fatal(`Modèle introuvable sur OpenRouter : ${model}`);
       if (/context length|context window|maximum context|too many tokens|prompt is too long/i.test(msg)) throw slowErr('historique trop long pour ce modèle');
-      if (res.status === 400 && useFormat) { useFormat = false; continue; }
+      if (res.status === 400 && useFormat) { useFormat = false; noJsonMode.add(model); continue; }
       if (res.status === 429 && (isFree(model) || /per-day|per day/i.test(msg))) throw slowErr('limite gratuite OpenRouter atteinte');
       if (res.status === 429 || res.status >= 500) { await wait(2500 * (i + 1)); continue; }
       if (!res.ok) throw new Error(msg);
@@ -3507,7 +3541,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
   // ---------- Gemini en direct (clé Google AI Studio) ----------
   const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
   DIRECT.gemini.list = async (key) => {
-    const r = await fetch(`${GEMINI}/models?pageSize=1000&key=${encodeURIComponent(key)}`);
+    const r = await fetch(`${GEMINI}/models?pageSize=1000`, { headers: { 'x-goog-api-key': key } });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
     return (d.models || [])
@@ -3515,7 +3549,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
       .map((m) => { const id = m.name.replace(/^models\//, ''); return { id, name: `${m.displayName || id} (clé Gemini)` }; });
   };
   DIRECT.gemini.check = async (key) => {
-    const r = await fetch(`${GEMINI}/models?pageSize=1&key=${encodeURIComponent(key)}`);
+    const r = await fetch(`${GEMINI}/models?pageSize=1`, { headers: { 'x-goog-api-key': key } });
     if (r.ok) return { ok: true, text: 'Clé Gemini valide.' };
     return { ok: false, text: r.status === 400 || r.status === 403 ? 'Clé refusée par Google. Vérifie qu\'elle est complète.' : `Google répond ${r.status}.` };
   };
@@ -3526,9 +3560,10 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     let deadline = Date.now() + limit;
     const left = () => deadline - Date.now();
     const wait = async (ms) => { if (left() < ms + 3000) throw slowErr(`pas de réponse en ${limit / 1000} s`); await sleep(ms); };
-    // Réflexion réduite, comme l'effort « low » demandé via OpenRouter.
-    let thinking = /gemini-2\.5/.test(model) ? { thinkingBudget: /pro/.test(model) ? 512 : 0 } : /gemini-[3-9]/.test(model) ? { thinkingLevel: 'low' } : null;
-    let useFormat = true;
+    // Même réflexion que via OpenRouter : effort « low » ≈ 20 % de max_tokens (2000), soit ~400 tokens ;
+    // 512 est le minimum accepté par toutes les variantes 2.5 (Flash-Lite compris). Gemini 3+ : niveau « low ».
+    let thinking = /gemini-2\.5/.test(model) ? { thinkingBudget: 512 } : /gemini-[3-9]/.test(model) ? { thinkingLevel: 'low' } : null;
+    let useFormat = !noJsonMode.has(`gemini:${model}`);
     let maxTokens = 2000;
     for (let i = 0; i < 4; i++) {
       if (left() < 2000) throw slowErr(`pas de réponse en ${limit / 1000} s`);
@@ -3538,8 +3573,9 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
       const t0 = Date.now();
       let res, data;
       try {
-        res = await fetch(`${GEMINI}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
-          method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json' },
+        // Clé dans l'en-tête plutôt que dans l'URL : elle n'apparaît ni dans les journaux réseau ni dans les erreurs.
+        res = await fetch(`${GEMINI}/models/${encodeURIComponent(model)}:generateContent`, {
+          method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: system }] },
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -3554,7 +3590,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
       } catch (e) {
         ctl.done();
         if (game.stopped) throw e;
-        if (document.hidden || game.paused) { await game.gate(); deadline += Date.now() - t0; i--; continue; }
+        if (document.hidden || game.paused) { holdWhileHidden(game); await game.gate(); deadline += Date.now() - t0; i--; continue; }
         if (timedOut) throw slowErr(`pas de réponse en ${limit / 1000} s`);
         if (i < 3) { await wait(1500 * (i + 1)); continue; }
         throw new Error('réseau injoignable');
@@ -3565,7 +3601,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
       if (res.status === 404) throw fatal(`Modèle introuvable chez Google : ${model}`);
       if (/token count|exceeds the maximum|context/i.test(msg) && res.status === 400) throw slowErr('historique trop long pour ce modèle');
       if (res.status === 400 && thinking) { thinking = null; continue; }
-      if (res.status === 400 && useFormat) { useFormat = false; continue; }
+      if (res.status === 400 && useFormat) { useFormat = false; noJsonMode.add(`gemini:${model}`); continue; }
       if (res.status === 429 && /per ?day|PerDay/i.test(msg)) throw slowErr('quota Gemini du jour atteint');
       if (res.status === 429 || res.status >= 500) { await wait(4000 * (i + 1)); continue; }
       if (!res.ok) throw new Error(msg);
@@ -3591,8 +3627,8 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
         throw fatal(e.code === 'session_expired' ? 'Session Claude expirée : reconnecte-toi puis relance.' : 'Claude n\'est pas autorisé pour cette page. Autorise-le puis relance une partie.');
       }
       if (e.code === 'rate_limited') {
-        banner('Limite d\'utilisation de Claude atteinte. La partie est en pause : appuie sur Reprendre un peu plus tard.');
-        game.pause(); updatePause(); await game.gate();
+        const tb = tableOf(game); if (tb) tb.banner = 'Limite d\'utilisation de Claude atteinte. La partie est en pause : appuie sur Reprendre un peu plus tard.';
+        showBanner(); game.pause(); updatePause(); renderTabs(); await game.gate();
         return run();
       }
       if (e.code === 'cancelled' && !game.stopped) throw slowErr('pas de réponse en 3 min');
@@ -3625,8 +3661,11 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
       updatePause(); renderTabs();
     } else {
       keepAwake();
-      for (const t of live) if (t.autoPaused) t.banner = 'Partie en pause pendant que l\'appli était en arrière-plan. Appuie sur Reprendre pour continuer.';
-      showBanner(); renderTabs();
+      const held = tables.filter((t) => running(t) && t.autoPaused);
+      const msg = held.length > 1 ? `${held.length} parties en pause pendant que l'appli était en arrière-plan. Appuie sur Reprendre pour toutes les relancer.` : 'Partie en pause pendant que l\'appli était en arrière-plan. Appuie sur Reprendre pour continuer.';
+      for (const t of held) t.banner = msg;
+      if (held.length && active && !held.includes(active)) active.banner = msg;
+      showBanner(); updatePause(); renderTabs();
     }
   });
 
@@ -3778,11 +3817,13 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
       parallelVotes: seats.every((s) => isModelSeat(s) || s.provider === 'bot'),
     };
     if (t.persist) {
-      // Stockage plein : on libère d'abord les vieux logs détaillés, jamais la partie en cours.
       opts.onCheckpoint = (sn) => {
         if (store.set('lga.current', sn)) return;
+        // Stockage plein : on libère d'abord les logs (repli localStorage) puis les plus vieux résumés, jamais la partie en cours.
         const logs = store.get('lga.logs', []);
         while (logs.length && !store.set('lga.current', sn)) { logs.shift(); store.set('lga.logs', logs); }
+        const games = store.get('lga.games', []);
+        while (games.length && !store.set('lga.current', sn)) { games.splice(0, Math.ceil(games.length / 10)); store.set('lga.games', games); }
       };
     }
     if (inSeries) {
@@ -3795,6 +3836,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     const g = snap ? Engine.Game.restore(snap, opts) : new Engine.Game(opts);
     g.turnLimit = config.turnLimit;
     t.game = g;
+    if (document.hidden) { g.pause(); t.autoPaused = true; }
     t.human = g.players.find((p) => p.seat.provider === 'human') || null;
     const free = g.players.filter((p) => p.seat.provider === 'openrouter' && isFree(p.seat.model)).length;
     if (free) t.banner = `${free} siège${free > 1 ? 's utilisent' : ' utilise'} un modèle gratuit (:free). OpenRouter limite fortement leur débit : attends-toi à des tours passés.`;
@@ -3807,7 +3849,10 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
       if (summary) {
         saveGame(summary, g);
         if (inSeries) {
-          for (const p of g.players) (sr.recaps[p.seat.id] ||= []).push(Engine.gameRecap(g, p, sr.index));
+          for (const p of g.players) {
+            const r = (sr.recaps[p.seat.id] ||= []); r.push(Engine.gameRecap(g, p, sr.index));
+            if (r.length > (sr.memoryGames || 0)) r.splice(0, r.length - (sr.memoryGames || 0));
+          }
           sr.index++;
           if (sr.index > sr.size) sr.done = true;
           if (t.persist) saveSeries();
@@ -3856,6 +3901,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
       setThinking(null); markSpeaking(null);
       $('reveal').disabled = false;
       showBanner(); renderPlayers(); renderResult();
+      requestAnimationFrame(() => $('result').scrollIntoView({ block: 'start', behavior: 'smooth' }));
     }
     renderTabs();
   }
@@ -3931,14 +3977,21 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     b.textContent = text;
   }
 
+  const heldTables = () => tables.filter((t) => running(t) && t.autoPaused && t.game.paused);
   function updatePause() {
     const b = $('pause-btn');
-    b.disabled = !game || game.phase === 'end'; $('stop-btn').disabled = b.disabled;
-    b.textContent = game?.paused ? 'Reprendre' : 'Pause';
+    const held = heldTables().length;
+    b.disabled = (!game || game.phase === 'end') && !held; $('stop-btn').disabled = !game || game.phase === 'end';
+    b.textContent = game?.paused || held ? (held > 1 ? `Reprendre (${held})` : 'Reprendre') : 'Pause';
   }
   $('pause-btn').addEventListener('click', () => {
     if (!game) return;
-    if (game.paused) { active.banner = ''; active.autoPaused = false; showBanner(); game.resume(); } else game.pause();
+    // Reprendre relance aussi les parties mises en pause par l'arrière-plan, quel que soit l'onglet affiché.
+    const held = heldTables();
+    if (game.paused || held.length) {
+      for (const t of new Set([...(game.paused ? [active] : []), ...held])) { t.banner = ''; t.autoPaused = false; t.game.resume(); }
+      active.banner = ''; showBanner();
+    } else game.pause();
     updatePause(); renderTabs();
   });
   $('stop-btn').addEventListener('click', () => { $('stop-confirm').hidden = false; });
@@ -4096,7 +4149,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
         const li = el('li', 'ev speech'); if (human && p.id === human.id) li.classList.add('mine');
         const bub = el('div', 'bub');
         const who = el('div', 'who'); who.append(el('span', null, human && p.id === human.id ? 'Toi' : p.name));
-        if (game.debateRounds > 1) who.append(el('span', 'round', `tour ${ev.round}`));
+        if (game.debateRounds > 1 && ev.phase !== 'mayor') who.append(el('span', 'round', `tour ${ev.round}`));
         if (canReveal()) {
           who.append(el('span', `pill ${roleClass(p)}`, p.role));
           who.append(el('span', 'tag', Engine.seatLabel(p.seat)));
@@ -4253,7 +4306,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
         for (const q of opts) {
           const b = el('button'); b.type = 'button'; b.setAttribute('aria-pressed', 'false');
           const known = q.alive && knowsRole(q) && q.id !== p.id;
-          const name = el('span', null, q.name); if (known) name.append(el('small', null, q.role));
+          const name = el('span', null, q.id === p.id ? 'Toi' : q.name); if (known) name.append(el('small', null, q.role));
           b.append(el('span', 'av', String(q.id)), name);
           b.addEventListener('click', () => { chosen = q.id; targets.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); });
           targets.append(b);
@@ -4309,24 +4362,72 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
   // ---------- Statistiques ----------
   // Logs détaillés au format loup-garou-log, allégés (sans pensées privées) pour en garder beaucoup.
   const MAX_LOGS = 200;
+  const MAX_GAMES = 1000;
+  // Les logs détaillés vivent dans IndexedDB (localStorage plafonne à ~5 Mo, soit ~140 parties).
+  // Repli sur localStorage si IndexedDB est indisponible (navigation privée, aperçu…).
+  const isLog = (l) => l && l.format === 'loup-garou-log';
+  const logStore = (() => {
+    let dbp = null;
+    const open = () => (dbp ||= new Promise((res, rej) => {
+      if (!window.indexedDB) return rej(new Error('pas d\'IndexedDB'));
+      const r = indexedDB.open('arene-des-loups', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('logs', { autoIncrement: true });
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    }).then(async (db) => {
+      // Migration unique des anciens logs gardés dans localStorage.
+      const old = store.get('lga.logs', null);
+      if (Array.isArray(old) && old.length) {
+        await tx(db, 'readwrite', (s) => { for (const l of old.filter(isLog)) s.add(l); });
+      }
+      try { localStorage.removeItem('lga.logs'); } catch (_) { /* rien */ }
+      return db;
+    }));
+    const tx = (db, mode, fn) => new Promise((res, rej) => {
+      const t = db.transaction('logs', mode); const s = t.objectStore('logs');
+      const out = fn(s);
+      t.oncomplete = () => res(out && 'result' in out ? out.result : undefined);
+      t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+    });
+    const local = {
+      all: async () => store.get('lga.logs', []).filter(isLog),
+      add: async (log) => {
+        const logs = store.get('lga.logs', []).filter(isLog); logs.push(log);
+        while (logs.length > MAX_LOGS) logs.shift();
+        while (!store.set('lga.logs', logs) && logs.length > 1) logs.splice(0, Math.max(1, Math.ceil(logs.length / 10)));
+      },
+      clear: async () => { store.set('lga.logs', []); },
+    };
+    const safe = (fn, fb) => async (...a) => { try { return await fn(await open(), ...a); } catch (_) { return fb(...a); } };
+    return {
+      all: safe((db) => tx(db, 'readonly', (s) => s.getAll()).then((l) => (l || []).filter(isLog)), local.all),
+      add: safe(async (db, log) => {
+        await tx(db, 'readwrite', (s) => s.add(log));
+        const keys = await tx(db, 'readonly', (s) => s.getAllKeys());
+        if (keys.length > MAX_LOGS) await tx(db, 'readwrite', (s) => { for (const k of keys.slice(0, keys.length - MAX_LOGS)) s.delete(k); });
+      }, local.add),
+      clear: safe((db) => tx(db, 'readwrite', (s) => s.clear()), local.clear),
+    };
+  })();
+
   function saveGame(summary, g) {
-    const games = store.get('lga.games', []); games.push(summary); store.set('lga.games', games);
+    const games = store.get('lga.games', []); games.push(summary);
+    while (games.length > MAX_GAMES) games.shift();
+    while (!store.set('lga.games', games) && games.length > 1) games.splice(0, Math.ceil(games.length / 10));
     let log;
-    try { log = window.LGAnalytics ? LGAnalytics.fromEngine(g, { app: 'arene-v1', labelOf: Engine.seatLabel }) : null; } catch (_) { log = null; }
+    // Le moteur numérote les parties d'une série à partir de 1, le format de log à partir de 0.
+    const series = g.series ? { ...g.series, index: g.series.index - 1 } : null;
+    try { log = window.LGAnalytics ? LGAnalytics.fromEngine(g, { app: 'arene-v1', labelOf: Engine.seatLabel, series }) : null; } catch (_) { log = null; }
     if (!log) return;
     if (summary.forcedRoles) log.forcedRoles = true; // partie de test : à exclure des classements
     try { log = LGAnalytics.compactLog(log); } catch (_) { /* log complet */ }
-    const logs = store.get('lga.logs', []).filter((l) => l && l.format === 'loup-garou-log');
-    logs.push(log);
-    while (logs.length > MAX_LOGS) logs.shift();
-    // Stockage plein : on retire les plus anciennes parties jusqu'à ce que ça passe.
-    while (!store.set('lga.logs', logs) && logs.length > 1) logs.splice(0, Math.max(1, Math.ceil(logs.length / 10)));
+    logStore.add(log).then(() => { if (!$('view-stats').hidden) renderStats(); });
   }
 
   const pct = (a, b) => (b ? `${Math.round((100 * a) / b)} %` : '–');
   let statsView = null;
-  function renderStats() {
-    const logs = store.get('lga.logs', []).filter((l) => l && l.format === 'loup-garou-log');
+  async function renderStats() {
+    const logs = await logStore.all();
     if (window.LGStats) {
       try {
         if (!statsView) statsView = LGStats.mount($('stats-root'), { logs, prefix: 'lga.ui.' });
@@ -4347,15 +4448,15 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
   }
 
   $('export-btn').addEventListener('click', async () => {
-    const data = JSON.stringify({ games: store.get('lga.games', []), logs: store.get('lga.logs', []) }, null, 1);
+    const data = JSON.stringify({ games: store.get('lga.games', []), logs: await logStore.all() }, null, 1);
     const box = $('export-box'); box.value = data; box.hidden = false;
     try { await navigator.clipboard.writeText(data); $('stats-msg').textContent = 'Données copiées dans le presse-papiers.'; }
     catch (_) { box.select(); $('stats-msg').textContent = 'Copie automatique refusée : sélectionne le texte ci-dessus et copie-le.'; }
   });
   $('reset-btn').addEventListener('click', () => { $('reset-confirm').hidden = false; });
   $('reset-no').addEventListener('click', () => { $('reset-confirm').hidden = true; });
-  $('reset-yes').addEventListener('click', () => {
-    store.set('lga.games', []); store.set('lga.logs', []); $('reset-confirm').hidden = true;
+  $('reset-yes').addEventListener('click', async () => {
+    store.set('lga.games', []); await logStore.clear(); $('reset-confirm').hidden = true;
     $('stats-msg').textContent = 'Historique effacé.'; renderStats();
   });
 
