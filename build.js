@@ -12,6 +12,9 @@ const engine = `const Engine = (function () {\n${src('engine.js')}\nreturn { Gam
 // Module d'analyse (fil « Analyse et statistiques ») : format de log v1, si présent.
 const analyticsPath = [path.join(__dirname, '..', 'analysis', 'analytics.js'), path.join(__dirname, 'vendor', 'analytics.js')].find((f) => fs.existsSync(f)) || '';
 const analytics = analyticsPath ? fs.readFileSync(analyticsPath, 'utf8') : '';
+// Interface de l'onglet Stats (même fil), juste après analytics.js.
+const statsUiPath = [path.join(__dirname, '..', 'analysis', 'stats-ui.js'), path.join(__dirname, 'vendor', 'stats-ui.js')].find((f) => fs.existsSync(f)) || '';
+const statsUi = statsUiPath ? fs.readFileSync(statsUiPath, 'utf8') : '';
 const ui = src('ui.js').replace('__HOSTED_URL__', hosted);
 const inner = `<title>Arène des Loups</title>
 ${fonts}
@@ -21,6 +24,7 @@ ${src('style.css')}
 ${src('body.html')}
 <script>
 ${analytics}
+${statsUi}
 ${engine}
 ${ui}
 </script>

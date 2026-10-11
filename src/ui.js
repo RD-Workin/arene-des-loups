@@ -1044,58 +1044,33 @@
   }
 
   // ---------- Statistiques ----------
+  // Logs détaillés au format loup-garou-log, allégés (sans pensées privées) pour en garder beaucoup.
+  const MAX_LOGS = 200;
   function saveGame(summary, g) {
     const games = store.get('lga.games', []); games.push(summary); store.set('lga.games', games);
-    const logs = store.get('lga.logs', []);
     let log;
     try { log = window.LGAnalytics ? LGAnalytics.fromEngine(g, { app: 'arene-v1', labelOf: Engine.seatLabel }) : null; } catch (_) { log = null; }
-    log = log || { id: summary.id, events: g.events.map(({ t, ...e }) => e) };
+    if (!log) return;
     if (summary.forcedRoles) log.forcedRoles = true; // partie de test : à exclure des classements
+    try { log = LGAnalytics.compactLog(log); } catch (_) { /* log complet */ }
+    const logs = store.get('lga.logs', []).filter((l) => l && l.format === 'loup-garou-log');
     logs.push(log);
-    while (logs.length > 10) logs.shift();
-    if (!store.set('lga.logs', logs)) store.set('lga.logs', logs.slice(-3));
+    while (logs.length > MAX_LOGS) logs.shift();
+    // Stockage plein : on retire les plus anciennes parties jusqu'à ce que ça passe.
+    while (!store.set('lga.logs', logs) && logs.length > 1) logs.splice(0, Math.max(1, Math.ceil(logs.length / 10)));
   }
 
   const pct = (a, b) => (b ? `${Math.round((100 * a) / b)} %` : '–');
-
-  let statsCompo = null;
+  let statsView = null;
   function renderStats() {
-    const all = store.get('lga.games', []).filter((g) => g.winner !== 'abandon');
-    const counts = new Map();
-    for (const g of all) { const k = g.compo || '8 joueurs : 2 Loups-Garous, 1 Voyante, 1 Sorcière, 4 Villageois'; g.compo = k; counts.set(k, (counts.get(k) || 0) + 1); }
-    const sel = $('stats-compo'); sel.textContent = '';
-    const comps = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-    if (!statsCompo || (statsCompo !== '*' && !counts.has(statsCompo))) statsCompo = comps[0]?.[0] || '*';
-    for (const [k, n] of comps) { const o = el('option', null, `${k} (${n})`); o.value = k; sel.append(o); }
-    const allOpt = el('option', null, `Toutes les compositions (${all.length})`); allOpt.value = '*'; sel.append(allOpt);
-    sel.value = statsCompo;
-    $('stats-compo-wrap').hidden = comps.length < 2;
-    const games = statsCompo === '*' ? all : all.filter((g) => g.compo === statsCompo);
-    const rows = Engine.aggregate(games);
-    $('stats-empty').hidden = rows.length > 0;
-    $('stats-table').hidden = rows.length === 0;
-    const tb = $('stats-table').querySelector('tbody'); tb.textContent = '';
-    for (const s of rows) {
-      const tr = el('tr');
-      const name = el('td', 'model', s.label); name.title = s.label;
-      const win = el('td'); const bar = el('span', 'bar'); bar.style.width = `${Math.round((40 * s.wins) / s.games)}px`; win.append(bar, pct(s.wins, s.games));
-      tr.append(name, el('td', null, String(s.games)), win,
-        el('td', null, `${pct(s.wolfWins, s.wolfGames)} (${s.wolfGames})`), el('td', null, `${pct(s.villWins, s.villGames)} (${s.villGames})`),
-        el('td', null, pct(s.days, s.games)), el('td', null, s.speeches ? (s.lies / s.speeches).toFixed(2) : '–'), el('td', null, pct(s.goodVotes, s.votes)),
-        el('td', null, s.calls ? `${(s.callMs / s.calls / 1000).toFixed(1)} s` : '–'), el('td', null, s.calls ? pct(s.fallbacks, s.calls) : '–'));
-      tb.append(tr);
-    }
-    const roles = ['Loup-Garou', 'Voyante', 'Sorcière', 'Villageois'];
-    const rt = $('roles-table');
-    rt.querySelector('thead').textContent = ''; rt.querySelector('tbody').textContent = '';
-    const hr = el('tr'); hr.append(el('th', null, 'Modèle')); for (const r of roles) hr.append(el('th', null, r));
-    rt.querySelector('thead').append(hr);
-    for (const s of rows) {
-      const tr = el('tr'); tr.append(el('td', 'model', s.label));
-      for (const r of roles) { const x = s.roles[r]; tr.append(el('td', null, x ? `${pct(x.wins, x.games)} (${x.games})` : '–')); }
-      rt.querySelector('tbody').append(tr);
-    }
-    rt.hidden = rows.length === 0;
+    const logs = store.get('lga.logs', []).filter((l) => l && l.format === 'loup-garou-log');
+    if (window.LGStats) {
+      try {
+        if (!statsView) statsView = LGStats.mount($('stats-root'), { logs, prefix: 'lga.ui.' });
+        else statsView.update(logs);
+      } catch (e) { $('stats-root').textContent = `Statistiques indisponibles : ${e.message}`; }
+    } else $('stats-root').textContent = 'Module de statistiques absent de cette version.';
+    const games = store.get('lga.games', []).filter((g) => g.winner !== 'abandon');
     const h = $('history'); h.textContent = '';
     for (const g of games.slice(-20).reverse()) {
       const li = el('li');
@@ -1108,7 +1083,6 @@
     if (!games.length) h.append(el('li', 'hint', 'Les parties terminées s\'afficheront ici.'));
   }
 
-  $('stats-compo').addEventListener('change', (e) => { statsCompo = e.target.value; renderStats(); });
   $('export-btn').addEventListener('click', async () => {
     const data = JSON.stringify({ games: store.get('lga.games', []), logs: store.get('lga.logs', []) }, null, 1);
     const box = $('export-box'); box.value = data; box.hidden = false;

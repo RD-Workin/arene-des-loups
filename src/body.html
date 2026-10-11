@@ -208,26 +208,7 @@
 
   <!-- STATS -->
   <section id="view-stats" class="view" hidden>
-    <div class="card">
-      <h2>Classement des modèles</h2>
-      <label id="stats-compo-wrap" for="stats-compo" hidden>Composition comparée
-        <select id="stats-compo"></select>
-      </label>
-      <p id="stats-empty" class="hint">Aucune partie terminée pour l'instant. Les chiffres apparaîtront ici après ta première partie.</p>
-      <div class="tablewrap"><table id="stats-table" hidden>
-        <thead><tr>
-          <th>Modèle</th><th title="Parties jouées">Parties</th><th title="Taux de victoire">Victoires</th><th title="Victoires en Loup">En loup</th><th title="Victoires côté Village">Au village</th><th title="Part de la partie passée en vie">Survie</th><th title="Mensonges par prise de parole">Mensonges</th><th title="Votes contre le camp adverse">Votes justes</th><th title="Temps moyen de réponse">Réponse</th><th title="Part des tours où l'IA n'a pas répondu à temps ou correctement">Pannes</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table></div>
-      <details class="legend"><summary>Comment lire ces chiffres</summary>
-        <p><b>Survie</b> : part moyenne de la partie passée en vie. <b>Mensonges</b> : affirmations publiques (sur son propre rôle ou celui d'un autre) qui contredisent ce que le joueur savait, rapportées au nombre de prises de parole. <b>Votes justes</b> : votes dirigés contre le camp adverse. <b>Réponse</b> : temps moyen pour répondre. <b>Pannes</b> : part des tours où l'IA n'a pas répondu à temps ou correctement et a joué l'action par défaut.</p>
-      </details>
-    </div>
-    <div class="card">
-      <h2>Par rôle</h2>
-      <div class="tablewrap"><table id="roles-table"><thead></thead><tbody></tbody></table></div>
-    </div>
+    <div id="stats-root"></div>
     <div class="card">
       <h2>Historique</h2>
       <ul id="history" class="history"></ul>
