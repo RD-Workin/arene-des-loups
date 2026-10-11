@@ -323,3 +323,7 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
 .warn-free { font-size: .78rem; color: var(--muted); font-style: italic; }
 .roster li.free { border-style: dashed; }
 .roster li.free span::after { content: " · gratuit"; color: var(--muted); }
+
+/* Rôles imposés (tests) */
+.seat.with-role { grid-template-columns: 2.2rem minmax(0, 9rem) minmax(0, 1fr) minmax(0, 9rem); }
+@media (max-width: 460px) { .seat.with-role { grid-template-columns: 1.6rem minmax(0, 1fr); } .seat .role-pick { grid-column: 2; } }

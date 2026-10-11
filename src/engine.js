@@ -199,7 +199,7 @@ class Game {
     this.rules = rulesText(keys, this.debateRounds, opts.mayor ?? true);
     this.compoLabel = compoText(keys);
     const seats = opts.fixedOrder ? opts.seats.slice() : shuffle(opts.seats, this.rng);
-    const roles = shuffle(keys, this.rng);
+    const roles = Game.dealRoles(seats, keys, this.rng, !!opts.restore);
     this.players = seats.map((seat, i) => ({
       id: i + 1,
       name: `Joueur ${i + 1}`,
@@ -237,8 +237,23 @@ class Game {
       speakOffset: this.speakOffset, cost: this.cost || 0,
     }));
   }
+  // Rôles : ceux imposés sur un siège (mode test) sont pris dans la composition, le reste est tiré au hasard.
+  static dealRoles(seats, keys, rng, ignoreFixed = false) {
+    const pool = keys.slice();
+    const out = seats.map((s) => {
+      const k = !ignoreFixed && s.role;
+      if (!k) return null;
+      const i = pool.indexOf(k);
+      if (i < 0) throw new Error(`Trop de sièges imposés en ${ROLE[k] || k} pour cette composition.`);
+      pool.splice(i, 1);
+      return k;
+    });
+    const rest = shuffle(pool, rng);
+    return out.map((k) => k || rest.pop());
+  }
+
   static restore(snap, opts) {
-    const g = new Game({ ...opts, seats: snap.players.map((p) => p.seat), fixedOrder: true, seed: snap.seed, debateRounds: snap.debateRounds, maxDays: snap.maxDays, wolfChatRounds: snap.wolfChatRounds, mayor: snap.mayorElection, series: snap.series, compo: null });
+    const g = new Game({ ...opts, restore: true, seats: snap.players.map((p) => p.seat), fixedOrder: true, seed: snap.seed, debateRounds: snap.debateRounds, maxDays: snap.maxDays, wolfChatRounds: snap.wolfChatRounds, mayor: snap.mayorElection, series: snap.series, compo: null });
     Object.assign(g, {
       rngState: snap.rngState, day: snap.day, startedAt: snap.startedAt, rules: snap.rules, compoLabel: snap.compoLabel,
       players: snap.players, witch: snap.witch, attacked: new Set(snap.attacked), publicLog: snap.publicLog,
@@ -820,6 +835,7 @@ Réponds en JSON : {"pensee": "raisonnement privé, 1 à 3 phrases", "vote": num
       mayor: this.mayor?.id ?? null,
       seed: this.seed,
       compo: this.compoLabel,
+      forcedRoles: this.players.some((p) => !!p.seat.role) || undefined,
       winner: this.winner,
       days: this.day,
       players: this.players.map((p) => ({
@@ -874,7 +890,7 @@ function gameRecap(game, p, index) {
 function aggregate(games) {
   const by = new Map();
   for (const g of games) {
-    if (g.winner === 'abandon' || g.winner === 'egalite') continue;
+    if (g.winner === 'abandon' || g.winner === 'egalite' || g.forcedRoles) continue;
     for (const p of g.players) {
       if (p.provider === 'human') continue;
       const k = p.label;

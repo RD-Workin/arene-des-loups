@@ -35,6 +35,7 @@
   config.compo = config.compo || Engine.presetCompo(config.n);
   config.maxDays = config.maxDays || 10;
   config.turnLimit = config.turnLimit || 45;
+  config.fixRoles = !!config.fixRoles;
   function sanitizeSeats() {
     const s = Array.isArray(config.seats) ? config.seats.slice(0, config.n) : [];
     for (let i = 0; i < config.n; i++) if (!s[i] || !providerOk(s[i].provider)) s[i] = defaultSeat(i);
@@ -119,6 +120,15 @@
       }
       m.id = `seat-m-${i}`; m.setAttribute('aria-label', `Modèle du siège ${i + 1}`);
       li.append(m);
+      if (config.fixRoles) {
+        const r = el('select', 'role-pick'); r.id = `seat-r-${i}`; r.setAttribute('aria-label', `Rôle du siège ${i + 1}`);
+        const c = config.compo;
+        const opts = [['', 'Rôle au hasard'], ['LOUP', 'Loup-Garou'], ...(c.seer ? [['VOYANTE', 'Voyante']] : []), ...(c.witch ? [['SORCIERE', 'Sorcière']] : []), ['VILLAGEOIS', 'Villageois']];
+        for (const [v, t] of opts) { const o = el('option', null, t); o.value = v; r.append(o); }
+        r.value = opts.some(([v]) => v === seat.role) ? seat.role || '' : '';
+        r.addEventListener('change', () => { config.seats[i].role = r.value; touch(); });
+        li.classList.add('with-role'); li.append(r);
+      }
       ol.append(li);
     });
   }
@@ -145,8 +155,9 @@
     sanitizeSeats(); touch(); renderCompo(); renderSeats();
   });
   $('nwolves').addEventListener('change', (e) => { config.compo.wolves = Number(e.target.value); renderCompo(); saveConfig(); });
-  $('has-seer').addEventListener('change', (e) => { config.compo.seer = e.target.checked; renderCompo(); saveConfig(); });
-  $('has-witch').addEventListener('change', (e) => { config.compo.witch = e.target.checked; renderCompo(); saveConfig(); });
+  $('has-seer').addEventListener('change', (e) => { config.compo.seer = e.target.checked; renderCompo(); saveConfig(); if (config.fixRoles) renderSeats(); });
+  $('has-witch').addEventListener('change', (e) => { config.compo.witch = e.target.checked; renderCompo(); saveConfig(); if (config.fixRoles) renderSeats(); });
+  $('fix-roles').addEventListener('change', (e) => { config.fixRoles = e.target.checked; saveConfig(); renderSeats(); });
 
   $('rounds').addEventListener('change', (e) => { config.rounds = Number(e.target.value); saveConfig(); });
   $('maxdays').addEventListener('change', (e) => { config.maxDays = Number(e.target.value); saveConfig(); });
@@ -415,6 +426,13 @@
     renderCompo();
     const cerr = compo ? compoError({ ...compo, villagers: seats.length - compo.wolves - (compo.seer ? 1 : 0) - (compo.witch ? 1 : 0) }, seats.length) : '';
     if (cerr) return cerr;
+    if (compo) {
+      const keys = Engine.compoKeys({ ...compo, villagers: seats.length - compo.wolves - (compo.seer ? 1 : 0) - (compo.witch ? 1 : 0) });
+      for (const k of ['LOUP', 'VOYANTE', 'SORCIERE', 'VILLAGEOIS']) {
+        const want = seats.filter((s) => s.role === k).length, have = keys.filter((x) => x === k).length;
+        if (want > have) return `Rôles imposés : ${want} siège${want > 1 ? 's' : ''} en ${Engine.ROLE[k]}, mais la composition n'en prévoit que ${have}.`;
+      }
+    }
     if (seats.some((s) => s.provider === 'openrouter')) {
       const key = $('or-key').value.trim(); store.set('lga.key', key);
       if (!key) return 'Colle ta clé OpenRouter avant de lancer la partie.';
@@ -429,7 +447,7 @@
     if (game && game.phase !== 'end') return;
     clearTimeout(nextTimer);
     startError('');
-    const seats = config.seats.map((s, i) => ({ ...s, id: `s${i + 1}` }));
+    const seats = config.seats.map((s, i) => ({ ...s, id: `s${i + 1}`, role: config.fixRoles ? s.role || '' : '' }));
     const err = checkSeats(seats);
     if (err) return startError(err);
     const cur = store.get('lga.current', null);
@@ -903,7 +921,9 @@
     const logs = store.get('lga.logs', []);
     let log;
     try { log = window.LGAnalytics ? LGAnalytics.fromEngine(g, { app: 'arene-v1', labelOf: Engine.seatLabel }) : null; } catch (_) { log = null; }
-    logs.push(log || { id: summary.id, events: g.events.map(({ t, ...e }) => e) });
+    log = log || { id: summary.id, events: g.events.map(({ t, ...e }) => e) };
+    if (summary.forcedRoles) log.forcedRoles = true; // partie de test : à exclure des classements
+    logs.push(log);
     while (logs.length > 10) logs.shift();
     if (!store.set('lga.logs', logs)) store.set('lga.logs', logs.slice(-3));
   }
@@ -954,7 +974,7 @@
       const d = new Date(g.date);
       li.append(el('span', null, d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })));
       li.append(el('span', `w-${g.winner}`, g.winner === 'village' ? 'Village' : g.winner === 'loups' ? 'Loups' : 'Égalité'));
-      li.append(el('span', 'hint', `${g.series ? `série ${g.series.index}/${g.series.size} · ` : ''}${g.players.length} joueurs · ${g.days} jours · loups : ${g.players.filter((p) => p.team === 'loups').map((p) => p.label).join(', ')}`));
+      li.append(el('span', 'hint', `${g.forcedRoles ? 'rôles imposés, hors classement · ' : ''}${g.series ? `série ${g.series.index}/${g.series.size} · ` : ''}${g.players.length} joueurs · ${g.days} jours · loups : ${g.players.filter((p) => p.team === 'loups').map((p) => p.label).join(', ')}`));
       h.append(li);
     }
     if (!games.length) h.append(el('li', 'hint', 'Les parties terminées s\'afficheront ici.'));
@@ -982,7 +1002,7 @@
     if (freshConfig && envReady && !config.touched) config.seats = null;
     sanitizeSeats(); if (envReady) saveConfig();
     renderEnv(); renderCompo(); renderRoster(); renderSeats();
-    $('rounds').value = String(config.rounds); $('maxdays').value = String(config.maxDays); $('turn-limit').value = String(config.turnLimit);
+    $('rounds').value = String(config.rounds); $('maxdays').value = String(config.maxDays); $('turn-limit').value = String(config.turnLimit); $('fix-roles').checked = config.fixRoles;
     $('mayor').checked = config.mayor; $('series-size').value = String(config.seriesSize); $('memory').value = String(config.memory);
     $('memory-wrap').hidden = config.seriesSize < 2;
     renderIdle();
