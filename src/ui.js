@@ -741,7 +741,7 @@
     if (!game) return;
     const a = game.alive().length;
     const night = game.phase === 'night';
-    $('band').className = `phase-band ${night ? 'night' : 'day'}`;
+    $('band').className = `phase-band ${night ? 'night' : 'day'} ph-${game.phase}`;
     let t, sub, count = `${a} en vie`;
     if (night) { t = `Nuit ${game.day}`; sub = 'Le village dort. Les rôles agissent.'; }
     else if (game.phase === 'mayor') { t = 'Présentations'; sub = 'Chacun se présente, puis le village élit son Maire.'; if (ballots) count = `${ballots} / ${a} votes`; }

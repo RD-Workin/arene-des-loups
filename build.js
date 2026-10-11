@@ -15,11 +15,15 @@ const analytics = analyticsPath ? fs.readFileSync(analyticsPath, 'utf8') : '';
 // Interface de l'onglet Stats (même fil), juste après analytics.js.
 const statsUiPath = [path.join(__dirname, '..', 'analysis', 'stats-ui.js'), path.join(__dirname, 'vendor', 'stats-ui.js')].find((f) => fs.existsSync(f)) || '';
 const statsUi = statsUiPath ? fs.readFileSync(statsUiPath, 'utf8') : '';
+// Icône d'écran d'accueil (fil Design), embarquée pour rester un fichier unique.
+const iconPath = path.join(__dirname, 'src', 'app-icon.png');
+const appIcon = fs.existsSync(iconPath) ? `data:image/png;base64,${fs.readFileSync(iconPath).toString('base64')}` : '';
 const ui = src('ui.js').replace('__HOSTED_URL__', hosted);
 const inner = `<title>Arène des Loups</title>
 ${fonts}
 <style>
 ${src('style.css')}
+${fs.existsSync(path.join(__dirname, 'src', 'icons.css')) ? src('icons.css') : ''}
 </style>
 ${src('body.html')}
 <script>
@@ -38,6 +42,7 @@ fs.writeFileSync(path.join(__dirname, 'dist', 'index.html'), `<!doctype html>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Loups IA">
 <meta name="theme-color" content="#0f1220">
+${appIcon ? `<link rel="apple-touch-icon" href="${appIcon}"><link rel="icon" href="${appIcon}">` : ''}
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
 <body>

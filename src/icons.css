@@ -1,0 +1,131 @@
+/* Icônes de l'Arène des Loups. Fichier généré par design/icons/build-icons.js : ne pas éditer à la main.
+   Les règles viennent de design/icons/icons.rules.css. Aucune ressource externe, aucun logo de fournisseur. */
+:root {
+  --i-wolf: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%203l4%205h8l4-5v8l-3%204-3%206h-4l-3-6-3-4z%22%2F%3E%3Cpath%20d%3D%22M9%2012h.01M15%2012h.01M11%2017h2%22%2F%3E%3C%2Fsvg%3E");
+  --i-seer: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M2%2012s4-7%2010-7%2010%207%2010%207-4%207-10%207S2%2012%202%2012z%22%2F%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%223%22%2F%3E%3C%2Fsvg%3E");
+  --i-witch: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M9%203h6M10%203v6l-5%209a2%202%200%200%200%201.7%203h10.6a2%202%200%200%200%201.7-3l-5-9V3%22%2F%3E%3Cpath%20d%3D%22M7.5%2015h9%22%2F%3E%3C%2Fsvg%3E");
+  --i-village: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%2011l9-7%209%207%22%2F%3E%3Cpath%20d%3D%22M5%209.5V20h14V9.5%22%2F%3E%3Cpath%20d%3D%22M10%2020v-5h4v5%22%2F%3E%3C%2Fsvg%3E");
+  --i-mayor: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203l2.7%205.6%206.1.8-4.5%204.2%201.1%206.1L12%2016.8l-5.4%202.9%201.1-6.1-4.5-4.2%206.1-.8z%22%2F%3E%3C%2Fsvg%3E");
+  --i-lie: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%208.5C3%207%204.5%206%206%206h12c1.5%200%203%201%203%202.5V11c0%204-2.5%206-5%206-2%200-2.8-2-4-2s-2%202-4%202c-2.5%200-5-2-5-6z%22%2F%3E%3Cpath%20d%3D%22M7%2011h2.5M14.5%2011H17%22%2F%3E%3C%2Fsvg%3E");
+  --i-dead: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M7%2021V9a5%205%200%200%201%2010%200v12%22%2F%3E%3Cpath%20d%3D%22M4%2021h16M12%2010v6M9.5%2012.5h5%22%2F%3E%3C%2Fsvg%3E");
+  --i-vote: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%2012h16v8H4z%22%2F%3E%3Cpath%20d%3D%22M8%2012V4h8v8%22%2F%3E%3Cpath%20d%3D%22M10.5%208l1.2%201.2L14%207%22%2F%3E%3Cpath%20d%3D%22M9%2016h6%22%2F%3E%3C%2Fsvg%3E");
+  --i-warn: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%203l10%2018H2z%22%2F%3E%3Cpath%20d%3D%22M12%2010v5M12%2018h.01%22%2F%3E%3C%2Fsvg%3E");
+  --i-moon: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M20%2014.5A8%208%200%200%201%209.5%204a8%208%200%201%200%2010.5%2010.5z%22%2F%3E%3C%2Fsvg%3E");
+  --i-sun: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%224%22%2F%3E%3Cpath%20d%3D%22M12%202v2M12%2020v2M4.9%204.9l1.4%201.4M17.7%2017.7l1.4%201.4M2%2012h2M20%2012h2M4.9%2019.1l1.4-1.4M17.7%206.3l1.4-1.4%22%2F%3E%3C%2Fsvg%3E");
+  --i-chat: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%205h16v11H9l-5%204z%22%2F%3E%3Cpath%20d%3D%22M8%209.5h8M8%2012.5h5%22%2F%3E%3C%2Fsvg%3E");
+  --i-play: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M7%204l13%208-13%208z%22%2F%3E%3C%2Fsvg%3E");
+  --i-stop: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%226%22%20y%3D%226%22%20width%3D%2212%22%20height%3D%2212%22%20rx%3D%221.5%22%2F%3E%3C%2Fsvg%3E");
+  --i-shuffle: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%207h3.5c4%200%207%2010%2011%2010H21M3%2017h3.5c1.5%200%202.8-1.4%204-3.2M13.5%2010.2c1.2-1.8%202.5-3.2%204-3.2H21%22%2F%3E%3Cpath%20d%3D%22M18%204l3%203-3%203M18%2014l3%203-3%203%22%2F%3E%3C%2Fsvg%3E");
+  --i-copy: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%228%22%20y%3D%228%22%20width%3D%2212%22%20height%3D%2212%22%20rx%3D%222%22%2F%3E%3Cpath%20d%3D%22M16%208V5a1%201%200%200%200-1-1H5a1%201%200%200%200-1%201v10a1%201%200%200%200%201%201h3%22%2F%3E%3C%2Fsvg%3E");
+  --i-trash: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%207h16M10%207V4h4v3M6%207l1%2013h10l1-13M10%2011v6M14%2011v6%22%2F%3E%3C%2Fsvg%3E");
+  --i-check: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%2012.5l5%205L20%206.5%22%2F%3E%3C%2Fsvg%3E");
+  --i-send: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%2012l16-8-6%2016-3-7z%22%2F%3E%3Cpath%20d%3D%22M11%2013l9-9%22%2F%3E%3C%2Fsvg%3E");
+  --i-logo: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22%23000%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M12%201a11%2011%200%201%201%200%2022%2011%2011%200%200%201%200-22zM6.5%206.5l3.2%204h4.6l3.2-4v6.4L15%2016.2l-1.7%204h-2.6L9%2016.2l-2.5-3.3z%22%2F%3E%3C%2Fsvg%3E");
+}
+/* Une icône = un pseudo-élément teinté par currentColor et découpé par --ic. */
+.pill::before, .pl .role::before, .ev.night .tag::before, .ev.error::before,
+.ev.narr.vote > div:first-child::before, .kpi span::before, .sheet .eyebrow::before,
+.history .w-loups::before, .history .w-village::before,
+#start-btn::before, #idle-start::before, #stop-btn::before, #spread-btn::before,
+#export-btn::before, #reset-btn::before, #or-key-check::before, #human-send::before {
+  content: ""; display: inline-block; flex: none; width: 1.05em; height: 1.05em; vertical-align: -.17em;
+  background: currentColor;
+  -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat;
+}
+
+/* ---------- Rôles ---------- */
+.pill { display: inline-flex; align-items: center; gap: 4px; }
+.pill::before { width: 1.2em; height: 1.2em; }
+.pill.wolf, .pl.wolf .role { --ic: var(--i-wolf); }
+.pill.seer, .pl.seer .role { --ic: var(--i-seer); }
+.pill.witch, .pl.witch .role { --ic: var(--i-witch); }
+.pill.village, .pl.village .role { --ic: var(--i-village); }
+.pill.lie { --ic: var(--i-lie); }
+.pill:not(.wolf):not(.seer):not(.witch):not(.village):not(.lie)::before { display: none; }
+
+.pl .role { display: grid; justify-items: center; gap: 1px; }
+.pl .role::before { width: 1.6em; height: 1.6em; }
+.pl .role.mayor { --ic: var(--i-mayor); color: var(--moon); }
+.pl .role:not(.mayor) { --ic: var(--i-village); }
+.pl.wolf .role:not(.mayor) { --ic: var(--i-wolf); }
+.pl.seer .role:not(.mayor) { --ic: var(--i-seer); }
+.pl.witch .role:not(.mayor) { --ic: var(--i-witch); }
+/* Jeton cerclé de la couleur du rôle quand il est connu (sauf si « Toi » ou qui parle). */
+.pl.wolf:not(.me):not(.speaking) .tok { border-color: color-mix(in srgb, var(--wolf) 70%, var(--line)); }
+.pl.seer:not(.me):not(.speaking) .tok { border-color: color-mix(in srgb, var(--seer) 70%, var(--line)); }
+.pl.witch:not(.me):not(.speaking) .tok { border-color: color-mix(in srgb, var(--witch) 70%, var(--line)); }
+/* Mort : petite pierre tombale sous le numéro, en plus du trait. */
+.pl.dead .lbl::before { content: ""; display: inline-block; width: .85em; height: .85em; vertical-align: -.05em; margin-right: 2px; background: currentColor;
+  -webkit-mask: var(--i-dead) center / contain no-repeat; mask: var(--i-dead) center / contain no-repeat; }
+
+/* ---------- Bandeau de phase ---------- */
+.phase-band { position: relative; overflow: hidden; }
+.phase-band.night {
+  background-image:
+    radial-gradient(1.5px 1.5px at 62% 22%, color-mix(in srgb, var(--night-ink) 80%, transparent) 50%, transparent 51%),
+    radial-gradient(1px 1px at 78% 64%, color-mix(in srgb, var(--night-ink) 60%, transparent) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 88% 18%, color-mix(in srgb, var(--night-ink) 70%, transparent) 50%, transparent 51%),
+    radial-gradient(1px 1px at 46% 80%, color-mix(in srgb, var(--night-ink) 50%, transparent) 50%, transparent 51%),
+    radial-gradient(1px 1px at 30% 15%, color-mix(in srgb, var(--night-ink) 55%, transparent) 50%, transparent 51%),
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--moon) 14%, transparent), transparent 60%);
+}
+.phase-band.day {
+  background-image: radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--moon) 22%, transparent), transparent 55%);
+}
+/* Phases précises : actives si l'app ajoute la classe ph-<phase> sur #band. */
+.phase-band.ph-vote .astre, .phase-band.ph-mayor .astre, .phase-band.ph-end .astre {
+  border-radius: 0; box-shadow: none; background: var(--moon);
+  -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat;
+}
+.phase-band.ph-vote { --ic: var(--i-vote); }
+.phase-band.ph-mayor { --ic: var(--i-mayor); }
+.phase-band.ph-end { --ic: var(--i-logo); }
+
+/* ---------- Fil ---------- */
+.ev.phase { display: flex; align-items: center; gap: 10px; }
+.ev.phase::before, .ev.phase::after { content: ""; flex: 1; height: 1px; background: color-mix(in srgb, var(--moon) 45%, transparent); }
+.ev.night .tag { display: flex; align-items: center; gap: 5px; --ic: var(--i-moon); }
+.ev.error { display: flex; gap: 6px; align-items: baseline; --ic: var(--i-warn); }
+.ev.error::before { color: var(--moon); transform: translateY(.12em); }
+.ev.narr.vote > div:first-child { display: flex; gap: 6px; align-items: baseline; --ic: var(--i-vote); }
+.ev.narr.vote > div:first-child::before { color: var(--accent); transform: translateY(.12em); }
+
+/* ---------- Feuille d'action ---------- */
+.sheet .eyebrow { display: flex; align-items: center; gap: 6px; --ic: var(--i-chat); }
+.sheet.wolf .eyebrow { --ic: var(--i-wolf); }
+.sheet.seer .eyebrow { --ic: var(--i-seer); }
+.sheet.witch .eyebrow { --ic: var(--i-witch); }
+.sheet .eyebrow::before { width: 1.4em; height: 1.4em; }
+
+/* ---------- Fin de partie ---------- */
+.verdict::before { content: ""; justify-self: center; width: 52px; height: 52px; background: var(--moon);
+  -webkit-mask: var(--i-logo) center / contain no-repeat; mask: var(--i-logo) center / contain no-repeat; }
+.verdict.loups::before { background: var(--wolf); -webkit-mask-image: var(--i-wolf); mask-image: var(--i-wolf); }
+.verdict.village::before { background: var(--village); -webkit-mask-image: var(--i-village); mask-image: var(--i-village); }
+.kpi span { display: flex; align-items: center; gap: 4px; }
+.kpi:nth-child(1) span { --ic: var(--i-chat); }
+.kpi:nth-child(2) span { --ic: var(--i-lie); }
+.kpi:nth-child(3) span { --ic: var(--i-vote); }
+.kpi span::before { width: 1.3em; height: 1.3em; }
+
+/* ---------- Stats ---------- */
+.history .w-loups { --ic: var(--i-wolf); } .history .w-village { --ic: var(--i-village); }
+.history .w-loups::before, .history .w-village::before { margin-right: 4px; }
+
+/* ---------- Boutons ---------- */
+#start-btn, #idle-start, #stop-btn, #spread-btn, #export-btn, #reset-btn, #or-key-check, #human-send {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+#start-btn, #idle-start { --ic: var(--i-play); }
+#stop-btn { --ic: var(--i-stop); }
+#spread-btn { --ic: var(--i-shuffle); }
+#export-btn { --ic: var(--i-copy); }
+#reset-btn { --ic: var(--i-trash); }
+#or-key-check { --ic: var(--i-check); }
+#human-send { --ic: var(--i-send); }
+
+/* ---------- Marque ---------- */
+.brand { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; align-items: center; }
+.brand::before { content: ""; grid-row: span 2; width: 46px; height: 46px; background: var(--moon);
+  -webkit-mask: var(--i-logo) center / contain no-repeat; mask: var(--i-logo) center / contain no-repeat; }
+.brand h1, .brand .tag { grid-column: 2; }
