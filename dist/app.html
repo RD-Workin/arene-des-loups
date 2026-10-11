@@ -174,7 +174,7 @@ input[type="text"], input[type="password"], select, textarea {
 
 /* ---------- Feuille d'action (nuit / vote humain) ---------- */
 .sheet { background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--accent); border-radius: 18px 18px var(--r) var(--r); padding: 16px; display: grid; gap: 12px; box-shadow: 0 -8px 30px rgb(0 0 0 / .12); }
-.sheet.fixed { position: fixed; inset: auto 0 0 0; border-radius: 18px 18px 0 0; max-height: 80dvh; overflow-y: auto; z-index: 20; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+.sheet.fixed { position: fixed; inset: auto 0 0 0; border-radius: 18px 18px 0 0; max-height: 58dvh; overflow-y: auto; overscroll-behavior: contain; z-index: 20; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
 .sheet .grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line); justify-self: center; margin-top: -6px; }
 .sheet.seer { border-top-color: var(--seer); } .sheet.witch { border-top-color: var(--witch); } .sheet.wolf { border-top-color: var(--wolf); }
 .sheet.seer .eyebrow { color: var(--seer); } .sheet.witch .eyebrow { color: var(--witch); } .sheet.wolf .eyebrow { color: var(--wolf); }
@@ -311,6 +311,15 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
 #export-box { font-family: var(--f-mono); font-size: .75rem; }
 #human-desc { white-space: pre-line; }
 .pl .role.mayor { color: var(--moon); }
+
+/* Panneau d'action réductible */
+.sheet-top { position: relative; display: grid; justify-items: center; margin: -10px 0 -2px; }
+.grab-btn { border: 0; background: transparent; width: 100%; min-height: 28px; padding: 8px 0; display: grid; place-items: center; touch-action: none; cursor: grab; }
+.grab-btn .grab { margin: 0; width: 44px; height: 5px; }
+.min-btn { position: absolute; right: 0; top: 0; min-height: 32px; padding: 4px 12px; font-size: .82rem; }
+.fab { position: fixed; z-index: 21; right: 16px; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 12px); display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; padding: 12px 18px; min-height: 48px; background: var(--accent); color: var(--accent-ink); font-weight: 700; box-shadow: 0 6px 20px rgb(0 0 0 / .25); max-width: calc(100vw - 32px); }
+.fab span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fab .dot { background: currentColor; flex: none; }
 
 </style>
 <header class="top">
@@ -481,7 +490,10 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
     <!-- Tour du joueur humain -->
     <div id="human" class="sheet fixed" hidden>
       <div class="sheet-inner">
-        <span class="grab" aria-hidden="true"></span>
+        <div class="sheet-top">
+          <button id="human-grab" class="grab-btn" type="button" aria-label="Réduire le panneau"><span class="grab"></span></button>
+          <button id="human-min" class="ghost min-btn" type="button">Réduire</button>
+        </div>
         <p class="eyebrow" id="human-role"></p>
         <h3 id="human-title">À toi de jouer</h3>
         <details id="human-memo" class="memo"><summary>Ce que tu sais</summary><ul id="human-memo-list"></ul></details>
@@ -497,6 +509,7 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
         <button id="human-send" class="primary big" type="button">Valider</button>
       </div>
     </div>
+    <button id="human-fab" class="fab" type="button" hidden><span class="dot"></span><span id="human-fab-text">À toi de jouer</span></button>
   </section>
 
   <!-- STATS -->
@@ -2707,6 +2720,13 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     if (id) $(`pl-${id}`)?.classList.add('speaking');
   }
 
+  // Fait défiler pour que l'élément apparaisse juste au-dessus du panneau d'action (ou de la barre d'onglets).
+  function revealLatest(li, behavior) {
+    const sh = $('human'), tab = document.querySelector('.tabbar');
+    const limit = !sh.hidden ? sh.getBoundingClientRect().top : (tab ? tab.getBoundingClientRect().top : innerHeight);
+    const dy = li.getBoundingClientRect().bottom - (limit - 8);
+    if (dy > 0) window.scrollBy({ top: dy, behavior: behavior || 'auto' });
+  }
   function nearBottom() { return window.innerHeight + window.scrollY >= document.body.scrollHeight - 160; }
 
   function onEvent(ev) {
@@ -2717,7 +2737,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     if (ev.kind === 'speech' && ev.round !== debateRound) { debateRound = ev.round; updatePhase(); }
     if (ev.kind === 'ballot') { ballots = ev.n; updatePhase(); return; }
     if (['dawn', 'vote', 'end', 'phase', 'start', 'mayor', 'mayor_succession'].includes(ev.kind)) { renderPlayers(); updatePhase(); }
-    if (stick && li) li.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    if (stick && li) revealLatest(li, 'smooth');
   }
   function rerenderFeed() {
     const f = $('feed'); f.textContent = '';
@@ -2852,7 +2872,44 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
 
   // ---------- Joueur humain ----------
   let humanResolve = null;
-  function hideHuman() { $('human').hidden = true; humanResolve = null; }
+  // Le panneau se réduit (bouton, poignée ou glissé vers le bas) pour laisser lire le fil ;
+  // un bouton flottant le rouvre. Tant qu'il est ouvert, le bas de page lui laisse la place.
+  let humanOpen = false;
+  function padForSheet() {
+    const sh = $('human');
+    document.body.style.paddingBottom = humanOpen && !sh.hidden ? `${sh.offsetHeight + 12}px` : '';
+  }
+  function setHumanOpen(open) {
+    const active = !!humanResolve;
+    humanOpen = active && open;
+    $('human').hidden = !humanOpen;
+    $('human-fab').hidden = !active || humanOpen;
+    padForSheet();
+    const last = $('feed').lastElementChild;
+    if (active && last) requestAnimationFrame(() => revealLatest(last));
+  }
+  function hideHuman() { humanResolve = null; setHumanOpen(false); }
+  function initHumanSheet() {
+    $('human-min').addEventListener('click', () => setHumanOpen(false));
+    $('human-fab').addEventListener('click', () => setHumanOpen(true));
+    const grab = $('human-grab');
+    let y0 = null, moved = false;
+    grab.addEventListener('pointerdown', (e) => { y0 = e.clientY; moved = false; grab.setPointerCapture?.(e.pointerId); });
+    grab.addEventListener('pointermove', (e) => {
+      if (y0 == null) return;
+      const dy = Math.max(0, e.clientY - y0); if (dy > 6) moved = true;
+      $('human').style.transform = dy ? `translateY(${dy}px)` : '';
+    });
+    const end = (e) => {
+      if (y0 == null) return;
+      const dy = e.clientY - y0; y0 = null; $('human').style.transform = '';
+      if (!moved || dy > 50) setHumanOpen(false);
+    };
+    grab.addEventListener('pointerup', end);
+    grab.addEventListener('pointercancel', () => { y0 = null; $('human').style.transform = ''; });
+    if (window.ResizeObserver) new ResizeObserver(padForSheet).observe($('human'));
+    window.addEventListener('resize', padForSheet);
+  }
 
   function humanTurn(p, task) {
     return new Promise((resolve) => {
@@ -2905,7 +2962,8 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
         sel.disabled = !g.witch.poison;
       }
       $('human-desc').textContent = desc;
-      $('human').hidden = false;
+      $('human-fab-text').textContent = title;
+      setHumanOpen(true);
       $('human-send').onclick = () => {
         if (task.kind === 'speech') {
           const m = text.value.trim(); if (!m) { text.focus(); return; }
@@ -3013,6 +3071,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     $('memory-wrap').hidden = config.seriesSize < 2;
     renderIdle();
   }
+  initHumanSheet();
   boot();
   let v = 'play'; try { v = sessionStorage.getItem('lga.view') || 'play'; } catch (_) { /* rien */ }
   show(v);

@@ -585,6 +585,13 @@
     if (id) $(`pl-${id}`)?.classList.add('speaking');
   }
 
+  // Fait défiler pour que l'élément apparaisse juste au-dessus du panneau d'action (ou de la barre d'onglets).
+  function revealLatest(li, behavior) {
+    const sh = $('human'), tab = document.querySelector('.tabbar');
+    const limit = !sh.hidden ? sh.getBoundingClientRect().top : (tab ? tab.getBoundingClientRect().top : innerHeight);
+    const dy = li.getBoundingClientRect().bottom - (limit - 8);
+    if (dy > 0) window.scrollBy({ top: dy, behavior: behavior || 'auto' });
+  }
   function nearBottom() { return window.innerHeight + window.scrollY >= document.body.scrollHeight - 160; }
 
   function onEvent(ev) {
@@ -595,7 +602,7 @@
     if (ev.kind === 'speech' && ev.round !== debateRound) { debateRound = ev.round; updatePhase(); }
     if (ev.kind === 'ballot') { ballots = ev.n; updatePhase(); return; }
     if (['dawn', 'vote', 'end', 'phase', 'start', 'mayor', 'mayor_succession'].includes(ev.kind)) { renderPlayers(); updatePhase(); }
-    if (stick && li) li.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    if (stick && li) revealLatest(li, 'smooth');
   }
   function rerenderFeed() {
     const f = $('feed'); f.textContent = '';
@@ -730,7 +737,44 @@
 
   // ---------- Joueur humain ----------
   let humanResolve = null;
-  function hideHuman() { $('human').hidden = true; humanResolve = null; }
+  // Le panneau se réduit (bouton, poignée ou glissé vers le bas) pour laisser lire le fil ;
+  // un bouton flottant le rouvre. Tant qu'il est ouvert, le bas de page lui laisse la place.
+  let humanOpen = false;
+  function padForSheet() {
+    const sh = $('human');
+    document.body.style.paddingBottom = humanOpen && !sh.hidden ? `${sh.offsetHeight + 12}px` : '';
+  }
+  function setHumanOpen(open) {
+    const active = !!humanResolve;
+    humanOpen = active && open;
+    $('human').hidden = !humanOpen;
+    $('human-fab').hidden = !active || humanOpen;
+    padForSheet();
+    const last = $('feed').lastElementChild;
+    if (active && last) requestAnimationFrame(() => revealLatest(last));
+  }
+  function hideHuman() { humanResolve = null; setHumanOpen(false); }
+  function initHumanSheet() {
+    $('human-min').addEventListener('click', () => setHumanOpen(false));
+    $('human-fab').addEventListener('click', () => setHumanOpen(true));
+    const grab = $('human-grab');
+    let y0 = null, moved = false;
+    grab.addEventListener('pointerdown', (e) => { y0 = e.clientY; moved = false; grab.setPointerCapture?.(e.pointerId); });
+    grab.addEventListener('pointermove', (e) => {
+      if (y0 == null) return;
+      const dy = Math.max(0, e.clientY - y0); if (dy > 6) moved = true;
+      $('human').style.transform = dy ? `translateY(${dy}px)` : '';
+    });
+    const end = (e) => {
+      if (y0 == null) return;
+      const dy = e.clientY - y0; y0 = null; $('human').style.transform = '';
+      if (!moved || dy > 50) setHumanOpen(false);
+    };
+    grab.addEventListener('pointerup', end);
+    grab.addEventListener('pointercancel', () => { y0 = null; $('human').style.transform = ''; });
+    if (window.ResizeObserver) new ResizeObserver(padForSheet).observe($('human'));
+    window.addEventListener('resize', padForSheet);
+  }
 
   function humanTurn(p, task) {
     return new Promise((resolve) => {
@@ -783,7 +827,8 @@
         sel.disabled = !g.witch.poison;
       }
       $('human-desc').textContent = desc;
-      $('human').hidden = false;
+      $('human-fab-text').textContent = title;
+      setHumanOpen(true);
       $('human-send').onclick = () => {
         if (task.kind === 'speech') {
           const m = text.value.trim(); if (!m) { text.focus(); return; }
@@ -891,6 +936,7 @@
     $('memory-wrap').hidden = config.seriesSize < 2;
     renderIdle();
   }
+  initHumanSheet();
   boot();
   let v = 'play'; try { v = sessionStorage.getItem('lga.view') || 'play'; } catch (_) { /* rien */ }
   show(v);

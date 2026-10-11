@@ -166,7 +166,10 @@
     <!-- Tour du joueur humain -->
     <div id="human" class="sheet fixed" hidden>
       <div class="sheet-inner">
-        <span class="grab" aria-hidden="true"></span>
+        <div class="sheet-top">
+          <button id="human-grab" class="grab-btn" type="button" aria-label="Réduire le panneau"><span class="grab"></span></button>
+          <button id="human-min" class="ghost min-btn" type="button">Réduire</button>
+        </div>
         <p class="eyebrow" id="human-role"></p>
         <h3 id="human-title">À toi de jouer</h3>
         <details id="human-memo" class="memo"><summary>Ce que tu sais</summary><ul id="human-memo-list"></ul></details>
@@ -182,6 +185,7 @@
         <button id="human-send" class="primary big" type="button">Valider</button>
       </div>
     </div>
+    <button id="human-fab" class="fab" type="button" hidden><span class="dot"></span><span id="human-fab-text">À toi de jouer</span></button>
   </section>
 
   <!-- STATS -->
