@@ -58,16 +58,50 @@ function roleFromMessage(msg) {
   return m ? normalizeRole(m[1]) : null;
 }
 
+// Répare les défauts de JSON fréquents chez les modèles : retours à la ligne bruts dans une chaîne,
+// guillemets non échappés, virgule finale, objet tronqué. Parcours qui suit les chaînes.
+function repairJson(s) {
+  let out = '', inStr = false;
+  const stack = [];
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) {
+      if (c === '\\') { out += c + (s[i + 1] ?? ''); i++; continue; }
+      if (c === '"') {
+        let j = i + 1; while (j < s.length && /\s/.test(s[j])) j++;
+        if (j >= s.length || ',}]:'.includes(s[j])) { inStr = false; out += c; } else out += '\\"';
+        continue;
+      }
+      if (c === '\n') { out += '\\n'; continue; }
+      if (c === '\r' || c === '\t') { out += ' '; continue; }
+      out += c; continue;
+    }
+    if (c === '"') { inStr = true; out += c; continue; }
+    if (c === '{' || c === '[') stack.push(c === '{' ? '}' : ']');
+    if (c === '}' || c === ']') stack.pop();
+    out += c;
+  }
+  if (inStr) out += '"';
+  out = out.replace(/,\s*$/, '');
+  while (stack.length) out += stack.pop();
+  return out.replace(/,(\s*[}\]])/g, '$1');
+}
+
 function parseJsonLoose(text) {
   if (text && typeof text === 'object') return text;
   if (typeof text !== 'string') throw new Error('Réponse vide');
-  let s = text.trim();
-  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence) s = fence[1].trim();
+  let s = text.replace(/<(think|thinking|reasoning)>[\s\S]*?<\/\1>/gi, '').trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)(?:```|$)/i);
+  if (fence && fence[1].includes('{')) s = fence[1].trim();
   try { return JSON.parse(s); } catch (_) { /* on tente l'extraction */ }
-  const a = s.indexOf('{'), b = s.lastIndexOf('}');
-  if (a >= 0 && b > a) return JSON.parse(s.slice(a, b + 1));
-  throw new Error('JSON introuvable dans la réponse');
+  const a = s.indexOf('{');
+  if (a < 0) throw new Error('JSON introuvable dans la réponse');
+  const b = s.lastIndexOf('}');
+  const body = b > a ? s.slice(a, b + 1) : s.slice(a);
+  for (const cand of [body, repairJson(body), repairJson(s.slice(a))]) {
+    try { const o = JSON.parse(cand); if (o && typeof o === 'object') return o; } catch (_) { /* suivant */ }
+  }
+  throw new Error('JSON illisible dans la réponse');
 }
 
 function toPlayerNum(v) {
@@ -254,7 +288,7 @@ class Game {
     const a = this.alive().map((q) => q.name).join(', ');
     const dead = this.players.filter((q) => !q.alive).map((q) => `${q.name} (${q.role})`).join(', ') || 'aucun';
     const mem = p.memory.length ? p.memory.map((m) => `- ${m}`).join('\n') : '- (rien pour l\'instant)';
-    const hist = this.publicLog.length ? this.publicLog.join('\n') : '(la partie commence)';
+    const hist = this.publicLog.length ? this.historyText() : '(la partie commence)';
     let potions = '';
     if (p.roleKey === 'SORCIERE') {
       potions = `\nTes potions : vie ${this.witch.heal ? 'disponible' : 'déjà utilisée'}, mort ${this.witch.poison ? 'disponible' : 'déjà utilisée'}.`;
@@ -277,6 +311,26 @@ ${this.phase === 'night' ? `Nuit ${this.day}` : this.phase === 'mayor' ? 'Prése
 
 HISTORIQUE PUBLIC
 ${hist}`;
+  }
+
+  // Historique public envoyé aux joueurs. Les annonces du MJ (morts, votes, Maire) restent
+  // intégrales ; les débats d'avant-hier et plus anciens sont abrégés pour que le prompt ne
+  // grossisse pas sans fin (les petits modèles calent ou dépassent leur contexte en fin de partie).
+  historyText() {
+    const KEEP_DAYS = 2, CUT = 140;
+    const last = this.phase === 'night' ? this.day - 1 : this.day; // dernier jour de débat commencé
+    let day = 0, cut = false;
+    const out = this.publicLog.map((line) => {
+      const m = line.match(/^\[MJ\] --- Jour (\d+) :/);
+      if (m) day = Number(m[1]);
+      if (line.startsWith('[MJ]') || day > last - KEEP_DAYS) return line;
+      const q = line.indexOf(' : « ');
+      if (q < 0 || line.length <= CUT + q + 6) return line;
+      cut = true;
+      return `${line.slice(0, q + 4 + CUT).replace(/\s+\S*$/, '')}… »`;
+    });
+    if (cut) out.unshift('(Les débats de plus de deux jours sont abrégés ; les annonces du MJ sont complètes.)');
+    return out.join('\n');
   }
 
   // Demande une décision ; valide, réessaie une fois, puis repli aléatoire.
@@ -644,7 +698,7 @@ Réponds en JSON : {"pensee": "raisonnement privé, 1 à 2 phrases", "cible": nu
 ACTION — Débat du jour ${this.day}, tour de parole ${round}/${this.debateRounds}. C'est à toi de parler devant tout le village.
 Message public de 80 mots maximum.${round === this.debateRounds ? ' C\'est ta dernière prise de parole avant le vote.' : ''}
 Réponds en JSON : {
- "pensee": "ton raisonnement privé (jamais montré aux autres)",
+ "pensee": "ton raisonnement privé, 1 à 3 phrases (jamais montré aux autres)",
  "message": "ce que tu dis publiquement",
  "role_annonce": "le rôle que ton message affirme que tu as (même si c'est faux), ou null si tu n'en annonces pas",
  "affirmations": [{"joueur": numéro, "role": "rôle que ton message attribue à ce joueur"}]

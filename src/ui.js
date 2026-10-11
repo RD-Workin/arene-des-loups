@@ -294,6 +294,7 @@
       if (res.status === 401) throw fatal('Clé OpenRouter refusée. Vérifie-la dans Réglages.');
       if (res.status === 402) throw fatal('Crédit OpenRouter insuffisant pour continuer la partie.');
       if (res.status === 404 || /not a valid model|no endpoints found/i.test(msg)) throw fatal(`Modèle introuvable sur OpenRouter : ${model}`);
+      if (/context length|context window|maximum context|too many tokens|prompt is too long/i.test(msg)) throw slowErr('historique trop long pour ce modèle');
       if (res.status === 400 && useFormat) { useFormat = false; continue; }
       if (res.status === 429 && (isFree(model) || /per-day|per day/i.test(msg))) throw slowErr('limite gratuite OpenRouter atteinte');
       if (res.status === 429 || res.status >= 500) { await wait(2500 * (i + 1)); continue; }
