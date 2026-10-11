@@ -107,6 +107,12 @@
           </select>
         </label>
       </div>
+      <label for="parallel">Parties en même temps
+        <select id="parallel">
+          <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+        </select>
+      </label>
+      <p class="hint">Plusieurs parties entre IA tournent côte à côte, avec les mêmes sièges ; tu passes de l'une à l'autre en haut de l'écran Partie. Elles partagent ton débit OpenRouter, et seule une partie unique peut être reprise si l'appli se ferme.</p>
       <p class="hint">Une IA qui dépasse ce temps passe son tour : vote blanc le jour, choix au hasard la nuit. Ces pannes sont comptées dans les stats.</p>
       <label class="check" for="mayor"><input id="mayor" type="checkbox"> Présentations et élection du Maire avant la première nuit</label>
       <div class="grid2">
@@ -157,6 +163,8 @@
     </div>
 
     <div id="game" hidden>
+      <nav id="tables" class="tables" aria-label="Parties en cours" hidden></nav>
+      <div id="mosaic" class="mosaic" hidden></div>
       <p id="series-label" class="eyebrow" hidden></p>
       <div id="band" class="phase-band night">
         <span class="astre" aria-hidden="true"></span>

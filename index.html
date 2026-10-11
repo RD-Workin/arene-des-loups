@@ -350,6 +350,23 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
 #direct-keys { margin-top: 8px; }
 #direct-keys[open] { display: grid; gap: 8px; }
 
+/* Plusieurs parties en parallèle */
+.tables { position: sticky; top: 0; z-index: 6; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px 10px; padding: 8px 16px; background: var(--bg); }
+.tables::-webkit-scrollbar { display: none; }
+.tchip { flex: none; display: grid; justify-items: start; gap: 0; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 12px; padding: 6px 12px; min-height: 44px; font: inherit; font-weight: 700; font-size: .86rem; position: relative; }
+.tchip small { font-weight: 400; color: var(--muted); font-size: .74rem; }
+.tchip[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.tchip.live::after { content: ""; position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--moon); opacity: .55; }
+.tchip.unseen::after { opacity: 1; animation: blink 1.2s ease-in-out infinite; }
+.mosaic { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr)); gap: 10px; margin-bottom: 12px; }
+.mcard { text-align: left; display: grid; gap: 4px; align-content: start; border: 1px solid var(--line); border-radius: var(--r, 10px); background: var(--surface); color: var(--ink); padding: 12px; font: inherit; min-height: 150px; }
+.mcard.night { border-top: 3px solid var(--seer); }
+.mcard.day { border-top: 3px solid var(--moon); }
+.mcard .eyebrow { margin: 0; }
+.mcard b { font-size: 1.05rem; }
+.mcard .mlast { margin: 4px 0 0; font-size: .84rem; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+#game.in-mosaic > :not(#tables):not(#mosaic) { display: none !important; }
+
 /* Icônes de l'Arène des Loups. Fichier généré par design/icons/build-icons.js : ne pas éditer à la main.
    Les règles viennent de design/icons/icons.rules.css. Aucune ressource externe, aucun logo de fournisseur. */
 :root {
@@ -592,6 +609,12 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
           </select>
         </label>
       </div>
+      <label for="parallel">Parties en même temps
+        <select id="parallel">
+          <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+        </select>
+      </label>
+      <p class="hint">Plusieurs parties entre IA tournent côte à côte, avec les mêmes sièges ; tu passes de l'une à l'autre en haut de l'écran Partie. Elles partagent ton débit OpenRouter, et seule une partie unique peut être reprise si l'appli se ferme.</p>
       <p class="hint">Une IA qui dépasse ce temps passe son tour : vote blanc le jour, choix au hasard la nuit. Ces pannes sont comptées dans les stats.</p>
       <label class="check" for="mayor"><input id="mayor" type="checkbox"> Présentations et élection du Maire avant la première nuit</label>
       <div class="grid2">
@@ -642,6 +665,8 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
     </div>
 
     <div id="game" hidden>
+      <nav id="tables" class="tables" aria-label="Parties en cours" hidden></nav>
+      <div id="mosaic" class="mosaic" hidden></div>
       <p id="series-label" class="eyebrow" hidden></p>
       <div id="band" class="phase-band night">
         <span class="astre" aria-hidden="true"></span>
@@ -3142,6 +3167,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
   config.maxDays = config.maxDays || 10;
   config.turnLimit = config.turnLimit || 45;
   config.fixRoles = !!config.fixRoles;
+  config.parallel = Math.min(4, Math.max(1, Number(config.parallel) || 1));
   function sanitizeSeats() {
     const s = Array.isArray(config.seats) ? config.seats.slice(0, config.n) : [];
     for (let i = 0; i < config.n; i++) if (!s[i] || !providerOk(s[i].provider)) s[i] = defaultSeat(i);
@@ -3295,6 +3321,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
   $('rounds').addEventListener('change', (e) => { config.rounds = Number(e.target.value); saveConfig(); });
   $('maxdays').addEventListener('change', (e) => { config.maxDays = Number(e.target.value); saveConfig(); });
   $('turn-limit').addEventListener('change', (e) => { config.turnLimit = Number(e.target.value); saveConfig(); });
+  $('parallel').addEventListener('change', (e) => { config.parallel = Number(e.target.value); saveConfig(); });
   $('mayor').addEventListener('change', (e) => { config.mayor = e.target.checked; saveConfig(); });
   $('series-size').addEventListener('change', (e) => { config.seriesSize = Number(e.target.value); saveConfig(); $('memory-wrap').hidden = config.seriesSize < 2; });
   $('memory').addEventListener('change', (e) => { config.memory = Number(e.target.value); saveConfig(); });
@@ -3406,12 +3433,18 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
   const inflight = new Set();
   // Une erreur « lente » : le joueur a épuisé son temps, la partie joue son action par défaut sans réessayer.
   const slowErr = (m) => Object.assign(new Error(m), { slow: true });
-  function newCtl() {
+  // Chaque requête est rattachée à sa partie : arrêter une partie n'annule que ses propres appels.
+  function newCtl(game) {
     const c = new AbortController(); inflight.add(c);
-    c.done = () => { clearTimeout(c.timer); inflight.delete(c); };
+    if (game) (game._ctls ||= new Set()).add(c);
+    c.done = () => { clearTimeout(c.timer); inflight.delete(c); game?._ctls?.delete(c); };
     return c;
   }
-  function abortAll() { for (const c of inflight) { try { c.abort(); } catch (_) { /* rien */ } } inflight.clear(); }
+  function abortAll(game) {
+    const set = game ? game._ctls || new Set() : inflight;
+    for (const c of [...set]) { try { c.abort(); } catch (_) { /* rien */ } inflight.delete(c); }
+    set.clear();
+  }
 
   async function callOpenRouter(model, system, prompt, game) {
     const key = store.get('lga.key', '') || $('or-key').value.trim();
@@ -3423,7 +3456,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     let maxTokens = 2000;
     for (let i = 0; i < 4; i++) {
       if (left() < 2000) throw slowErr(`pas de réponse en ${limit / 1000} s`);
-      const ctl = newCtl();
+      const ctl = newCtl(game);
       let timedOut = false;
       ctl.timer = setTimeout(() => { timedOut = true; ctl.abort(); }, left());
       const t0 = Date.now();
@@ -3499,7 +3532,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     let maxTokens = 2000;
     for (let i = 0; i < 4; i++) {
       if (left() < 2000) throw slowErr(`pas de réponse en ${limit / 1000} s`);
-      const ctl = newCtl();
+      const ctl = newCtl(game);
       let timedOut = false;
       ctl.timer = setTimeout(() => { timedOut = true; ctl.abort(); }, left());
       const t0 = Date.now();
@@ -3547,7 +3580,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
 
   async function callClaude(tier, system, prompt, game) {
     const run = () => {
-      const ctl = newCtl();
+      const ctl = newCtl(game);
       ctl.timer = setTimeout(() => ctl.abort(), 180000);
       const opts = { modelTier: tier, cache: false, signal: ctl.signal };
       if (tier !== 'quick') opts.effort = 'low';
@@ -3568,31 +3601,43 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
   }
 
   // ---------- Partie ----------
-  let game = null;
-  let human = null;
+  // ---------- Parties (une ou plusieurs tables en parallèle) ----------
+  // Chaque table fait tourner sa propre partie (ou sa propre série). L'écran Partie montre la table
+  // active ; les autres continuent en fond et leur fil se reconstruit à partir de leurs événements.
+  // La table « principale » (mode une seule partie) garde la sauvegarde et la reprise (lga.current, lga.series).
+  const tables = [];
+  let active = null;
+  let game = null; // partie de la table active
+  let human = null; // joueur humain de la table active
   let wakeLock = null;
+  const running = (t) => !!t.game && t.game.phase !== 'end';
+  const anyRunning = () => tables.some(running) || tables.some((t) => t.nextTimer);
+  const tableOf = (g) => tables.find((t) => t.game === g) || null;
 
   async function keepAwake() {
     try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (_) { wakeLock = null; }
   }
-  let autoPaused = false;
   document.addEventListener('visibilitychange', () => {
-    if (!game || game.phase === 'end') return;
+    const live = tables.filter(running);
+    if (!live.length) return;
     if (document.visibilityState === 'hidden') {
-      if (!game.paused) { game.pause(); autoPaused = true; updatePause(); }
+      for (const t of live) if (!t.game.paused) { t.game.pause(); t.autoPaused = true; }
+      updatePause(); renderTabs();
     } else {
       keepAwake();
-      if (autoPaused) banner('Partie en pause pendant que l\'appli était en arrière-plan. Appuie sur Reprendre pour continuer.');
+      for (const t of live) if (t.autoPaused) t.banner = 'Partie en pause pendant que l\'appli était en arrière-plan. Appuie sur Reprendre pour continuer.';
+      showBanner(); renderTabs();
     }
   });
 
   function setThinking(text) { $('thinking').hidden = !text; if (text) $('thinking-text').textContent = text; }
 
   // Joueurs dont on attend la réponse, avec le temps écoulé : on voit qui traîne.
-  const pending = new Map();
   let pendingTimer = null;
   function refreshThinking() {
-    if (!pending.size) { setThinking(null); clearInterval(pendingTimer); pendingTimer = null; return; }
+    const pending = active?.pending;
+    if (!tables.some((t) => t.pending.size)) { clearInterval(pendingTimer); pendingTimer = null; }
+    if (!pending || !pending.size) { setThinking(null); return; }
     const list = [...pending.values()];
     const first = list[0];
     const s = Math.floor((Date.now() - first.t0) / 1000);
@@ -3617,13 +3662,14 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
   }
 
   async function agent(p, task) {
+    const t = tableOf(task.game);
     const token = {};
-    if (p.seat.provider !== 'human') {
-      pending.set(token, { p, task, t0: Date.now() });
-      refreshThinking();
+    if (t && p.seat.provider !== 'human') {
+      t.pending.set(token, { p, task, t0: Date.now() });
+      if (t === active) refreshThinking();
       pendingTimer = pendingTimer || setInterval(refreshThinking, 1000);
     }
-    markSpeaking(task.kind === 'speech' ? p.id : null);
+    if (t === active) markSpeaking(task.kind === 'speech' ? p.id : null);
     try {
       switch (p.seat.provider) {
         case 'bot': await sleep(task.kind === 'speech' ? 500 : 150); return Engine.botAgent(p, task);
@@ -3633,19 +3679,22 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
         case 'claude': return await callClaude(p.seat.model, task.system, task.prompt, task.game);
       }
       throw fatal('Fournisseur inconnu');
-    } finally { pending.delete(token); refreshThinking(); }
+    } finally { t?.pending.delete(token); if (t === active) refreshThinking(); }
   }
 
   function startError(msg) { const e = $('setup-error'); e.textContent = msg; e.hidden = !msg; if (msg) show('setup'); }
 
   // ---------- Séries ----------
-  // Dans une série, les sièges gardent le même pseudonyme (ordre tiré une fois) et chaque IA
-  // reçoit le résumé de ses X dernières parties.
-  let series = store.get('lga.series', null);
+  let series = store.get('lga.series', null); // série de la table principale, sauvegardée
   const saveSeries = () => store.set('lga.series', series);
-  let nextTimer = null;
 
   function shuffleArr(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+  const newSeries = (seats) => ({
+    id: `serie-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}-${Math.random().toString(36).slice(2, 6)}`,
+    size: config.seriesSize, memoryGames: config.memory, index: 1,
+    seats: shuffleArr(seats), compo: { ...config.compo }, rounds: config.rounds, maxDays: config.maxDays, mayor: config.mayor,
+    recaps: {},
+  });
 
   // compo : null pour une partie reprise (composition déjà distribuée).
   function checkSeats(seats, compo = config.compo) {
@@ -3668,17 +3717,17 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     }
     const empty = seats.findIndex((s) => isModelSeat(s) && !s.model);
     if (empty >= 0) return `Le siège ${empty + 1} n'a pas de modèle.`;
-    if (seats.some((s) => s.provider === 'claude') && !sample) return 'Claude n\'est pas disponible ici. Choisis d\'autres joueurs.';
     return '';
   }
 
   function startGame() {
-    if (game && game.phase !== 'end') return;
-    clearTimeout(nextTimer);
+    if (tables.some(running)) { startError('Des parties sont en cours : arrête-les depuis l\'onglet Partie avant d\'en lancer d\'autres.'); return; }
     startError('');
     const seats = config.seats.map((s, i) => ({ ...s, id: `s${i + 1}`, role: config.fixRoles ? s.role || '' : '' }));
     const err = checkSeats(seats);
     if (err) return startError(err);
+    const n = config.parallel;
+    if (n > 1 && seats.some((s) => s.provider === 'human')) return startError('Les parties en parallèle se jouent entre IA : retire ton siège humain ou lance une seule partie.');
     const cur = store.get('lga.current', null);
     if (((series && !series.done) || cur) && !replaceOk) {
       $('replace-text').textContent = cur
@@ -3689,87 +3738,98 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     }
     replaceOk = false; $('replace-confirm').hidden = true;
     store.set('lga.current', null);
-    if (config.seriesSize > 1) {
-      series = {
-        id: `serie-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}-${Math.random().toString(36).slice(2, 6)}`,
-        size: config.seriesSize, memoryGames: config.memory, index: 1,
-        seats: shuffleArr(seats), compo: { ...config.compo }, rounds: config.rounds, maxDays: config.maxDays, mayor: config.mayor,
-        recaps: {},
-      };
-      saveSeries();
-      return launch();
+    for (const t of tables) clearTimeout(t.nextTimer);
+    tables.length = 0;
+    series = config.seriesSize > 1 && n === 1 ? newSeries(seats) : null;
+    store.set('lga.series', series);
+    for (let i = 0; i < n; i++) {
+      const t = newTable(i + 1, n === 1);
+      if (config.seriesSize > 1) t.series = n === 1 ? series : newSeries(seats);
+      tables.push(t);
     }
-    series = null; store.set('lga.series', null);
-    launch(seats);
+    // Départs décalés de 2 s pour ne pas envoyer toutes les premières requêtes d'un coup.
+    tables.forEach((t, i) => { if (i === 0) activate(t); setTimeout(() => launch(t, t.series ? null : seats), i * 2000); });
+    renderTabs();
   }
   let replaceOk = false;
   $('replace-yes').addEventListener('click', () => { replaceOk = true; series = null; store.set('lga.series', null); startGame(); });
   $('replace-no').addEventListener('click', () => { $('replace-confirm').hidden = true; });
 
-  function launch(singleSeats, snap) {
-    if (game && game.phase !== 'end') return;
-    clearTimeout(nextTimer);
-    const inSeries = snap ? !!(snap.series && series && series.id === snap.series.id) : !singleSeats && series;
-    const seats = snap ? snap.players.map((p) => p.seat) : inSeries ? series.seats.map((s) => ({ ...s })) : singleSeats;
-    if (inSeries || snap) { const err = checkSeats(seats, snap ? null : series.compo); if (err) return startError(err); }
-    banner(''); autoPaused = false;
-    $('feed').textContent = ''; $('result').hidden = true; $('idle').hidden = true; $('game').hidden = false;
-    $('reveal').checked = false; $('stop-confirm').hidden = true;
-    $('series-label').hidden = !inSeries;
-    if (inSeries) $('series-label').textContent = `Série · partie ${series.index} sur ${series.size}${series.memoryGames ? ` · mémoire : ${series.memoryGames} partie${series.memoryGames > 1 ? 's' : ''}` : ''}`;
+  function newTable(n, persist) {
+    return { n, persist, game: null, human: null, series: null, debateRound: 0, ballots: 0, pending: new Map(), unseen: 0,
+      nextTimer: null, nextAt: 0, failed: false, banner: '', autoPaused: false, last: '' };
+  }
+
+  function launch(t, singleSeats, snap) {
+    if (running(t)) return;
+    clearTimeout(t.nextTimer); t.nextTimer = null; t.nextAt = 0;
+    const sr = t.series && !t.series.done ? t.series : null;
+    const inSeries = snap ? !!(snap.series && sr && sr.id === snap.series.id) : !singleSeats && !!sr;
+    const seats = snap ? snap.players.map((p) => p.seat) : inSeries ? sr.seats.map((s) => ({ ...s })) : singleSeats;
+    if (inSeries || snap) { const err = checkSeats(seats, snap ? null : sr.compo); if (err) return startError(err); }
+    t.banner = ''; t.autoPaused = false; t.failed = false; t.debateRound = 0; t.ballots = 0; t.unseen = 0; t.last = '';
     const opts = {
-      seats, agent, onEvent,
-      onCheckpoint: (sn) => {
-        // Stockage plein : on libère d'abord les vieux logs détaillés, jamais la partie en cours.
-        if (store.set('lga.current', sn)) return;
-        const logs = store.get('lga.logs', []);
-        while (logs.length && !store.set('lga.current', sn)) { logs.shift(); store.set('lga.logs', logs); }
-      },
-      compo: inSeries ? { ...series.compo } : { ...config.compo },
-      debateRounds: inSeries ? series.rounds : config.rounds,
-      maxDays: inSeries ? series.maxDays : config.maxDays,
-      mayor: inSeries ? series.mayor : config.mayor,
+      seats, agent, onEvent: (ev) => onEvent(t, ev),
+      compo: inSeries ? { ...sr.compo } : { ...config.compo },
+      debateRounds: inSeries ? sr.rounds : config.rounds,
+      maxDays: inSeries ? sr.maxDays : config.maxDays,
+      mayor: inSeries ? sr.mayor : config.mayor,
       minNightMs: seats.some((s) => s.provider === 'human') ? 8000 : 0,
       parallelVotes: seats.every((s) => isModelSeat(s) || s.provider === 'bot'),
     };
+    if (t.persist) {
+      // Stockage plein : on libère d'abord les vieux logs détaillés, jamais la partie en cours.
+      opts.onCheckpoint = (sn) => {
+        if (store.set('lga.current', sn)) return;
+        const logs = store.get('lga.logs', []);
+        while (logs.length && !store.set('lga.current', sn)) { logs.shift(); store.set('lga.logs', logs); }
+      };
+    }
     if (inSeries) {
-      const sr = series;
       Object.assign(opts, {
         fixedOrder: true,
         series: { id: sr.id, index: sr.index, size: sr.size, memoryGames: sr.memoryGames },
         memoryFor: (p) => (sr.memoryGames ? (sr.recaps[p.seat.id] || []).slice(-sr.memoryGames).join('\n') : ''),
       });
     }
-    game = snap ? Engine.Game.restore(snap, opts) : new Engine.Game(opts);
-    game.turnLimit = config.turnLimit;
-    const free = game.players.filter((p) => p.seat.provider === 'openrouter' && isFree(p.seat.model)).length;
-    if (free) banner(`${free} siège${free > 1 ? 's utilisent' : ' utilise'} un modèle gratuit (:free). OpenRouter limite fortement leur débit : attends-toi à des tours passés.`);
-    human = game.players.find((p) => p.seat.provider === 'human') || null;
-    if (snap) { rerenderFeed(); $('feed').append(el('li', 'ev narr', `Partie reprise au ${snap.next === 'day' ? 'jour' : 'début de la nuit'} ${snap.next === 'day' ? snap.day : snap.day + 1}.`)); }
-    $('reveal').disabled = !!human;
-    renderPlayers(); updatePhase(); updatePause();
-    show('play'); keepAwake();
-    const g = game;
+    const g = snap ? Engine.Game.restore(snap, opts) : new Engine.Game(opts);
+    g.turnLimit = config.turnLimit;
+    t.game = g;
+    t.human = g.players.find((p) => p.seat.provider === 'human') || null;
+    const free = g.players.filter((p) => p.seat.provider === 'openrouter' && isFree(p.seat.model)).length;
+    if (free) t.banner = `${free} siège${free > 1 ? 's utilisent' : ' utilise'} un modèle gratuit (:free). OpenRouter limite fortement leur débit : attends-toi à des tours passés.`;
+    t.resumedAt = snap ? `Partie reprise au ${snap.next === 'day' ? 'jour' : 'début de la nuit'} ${snap.next === 'day' ? snap.day : snap.day + 1}.` : '';
+    if (t === active) { activate(t); show('play'); }
+    renderTabs();
+    keepAwake();
     g.run().then((summary) => {
-      store.set('lga.current', null);
+      if (t.persist) store.set('lga.current', null);
       if (summary) {
         saveGame(summary, g);
         if (inSeries) {
-          for (const p of g.players) (series.recaps[p.seat.id] ||= []).push(Engine.gameRecap(g, p, series.index));
-          series.index++;
-          if (series.index > series.size) series.done = true;
-          saveSeries();
+          for (const p of g.players) (sr.recaps[p.seat.id] ||= []).push(Engine.gameRecap(g, p, sr.index));
+          sr.index++;
+          if (sr.index > sr.size) sr.done = true;
+          if (t.persist) saveSeries();
         }
       }
-      finishGame();
-    }).catch((e) => { g.phase = 'end'; banner(`${e.message || String(e)} La partie est sauvegardée : tu pourras la reprendre depuis l'onglet Partie.`); finishGame(true); renderIdle(); });
+      finishGame(t, false);
+    }).catch((e) => {
+      g.phase = 'end';
+      t.banner = `${e.message || String(e)}${t.persist ? ' La partie est sauvegardée : tu pourras la reprendre depuis l\'onglet Partie.' : ''}`;
+      finishGame(t, true); renderIdle();
+    });
   }
   $('start-btn').addEventListener('click', startGame);
   $('idle-start').addEventListener('click', startGame);
-  $('series-resume-btn').addEventListener('click', () => launch());
+  // Reprise (mode une partie) : la table principale reprend la série ou la partie sauvegardée.
+  function mainTable() {
+    tables.length = 0;
+    const t = newTable(1, true); t.series = series; tables.push(t); active = t; return t;
+  }
+  $('series-resume-btn').addEventListener('click', () => { if (!tables.some(running)) launch(mainTable()); });
   $('series-drop-btn').addEventListener('click', () => { series = null; store.set('lga.series', null); renderIdle(); });
-
-  $('current-resume-btn').addEventListener('click', () => { const sn = store.get('lga.current', null); if (sn) launch(null, sn); });
+  $('current-resume-btn').addEventListener('click', () => { const sn = store.get('lga.current', null); if (sn && !tables.some(running)) launch(mainTable(), null, sn); });
   $('current-drop-btn').addEventListener('click', () => { store.set('lga.current', null); renderIdle(); });
 
   function renderIdle() {
@@ -3781,15 +3841,90 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     if (live) $('series-resume-text').textContent = `Une série est en cours : partie ${series.index} sur ${series.size}.`;
   }
 
-  function finishGame(failed) {
-    setThinking(null); markSpeaking(null); hideHuman();
-    try { wakeLock?.release(); } catch (_) { /* rien */ }
-    $('reveal').disabled = false;
-    $('pause-btn').disabled = true; $('stop-btn').disabled = true;
-    renderPlayers(); renderResult(failed);
+  function finishGame(t, failed) {
+    t.failed = failed;
+    t.pending.clear();
+    if (t.human) hideHuman();
+    const sr = t.series;
+    // Série : la partie suivante démarre seule après 10 s, que la table soit affichée ou non.
+    if (!failed && t.game.winner !== 'abandon' && sr && !sr.done && t.game.series) {
+      t.nextAt = Date.now() + 10000;
+      t.nextTimer = setTimeout(() => { t.nextTimer = null; launch(t); }, 10000);
+    }
+    if (!tables.some(running) && !tables.some((x) => x.nextTimer)) { try { wakeLock?.release(); } catch (_) { /* rien */ } }
+    if (t === active) {
+      setThinking(null); markSpeaking(null);
+      $('reveal').disabled = false;
+      showBanner(); renderPlayers(); renderResult();
+    }
+    renderTabs();
   }
 
-  function banner(text) {
+  // ---------- Onglets des tables et mosaïque ----------
+  let mosaic = false;
+  function tableStatus(t) {
+    const g = t.game;
+    if (!g) return 'en attente';
+    if (t.nextTimer) return 'partie suivante…';
+    if (g.phase === 'end') return t.failed ? 'erreur' : g.winner === 'village' ? 'Village gagne' : g.winner === 'loups' ? 'Loups gagnent' : 'arrêtée';
+    if (g.paused) return 'en pause';
+    return g.phase === 'night' ? `Nuit ${g.day}` : g.phase === 'mayor' ? 'Maire' : g.phase === 'vote' ? `Vote J${g.day}` : `Jour ${g.day}`;
+  }
+  function renderTabs() {
+    const bar = $('tables');
+    bar.hidden = tables.length < 2;
+    $('mosaic').hidden = !mosaic || tables.length < 2;
+    $('game').classList.toggle('in-mosaic', mosaic && tables.length > 1);
+    if (tables.length < 2) return;
+    bar.textContent = '';
+    const mk = (label, sel, on) => {
+      const b = el('button', 'tchip', label); b.type = 'button'; b.setAttribute('aria-pressed', String(sel)); b.addEventListener('click', on); bar.append(b); return b;
+    };
+    mk('Mosaïque', mosaic, () => { mosaic = true; renderTabs(); });
+    for (const t of tables) {
+      const b = mk(`Partie ${t.n}`, !mosaic && t === active, () => { mosaic = false; activate(t); renderTabs(); });
+      b.append(el('small', null, tableStatus(t)));
+      if (running(t) && t !== active) b.classList.add('live');
+      if (t.unseen && (t !== active || mosaic)) b.classList.add('unseen');
+    }
+    if (mosaic) {
+      const grid = $('mosaic'); grid.textContent = '';
+      for (const t of tables) {
+        const c = el('button', 'mcard'); c.type = 'button';
+        const g = t.game;
+        const night = g && g.phase === 'night';
+        c.classList.add(night ? 'night' : 'day');
+        if (running(t)) c.classList.add('live');
+        c.append(el('span', 'eyebrow', `Partie ${t.n}${t.series ? ` · série ${Math.min(t.series.index, t.series.size)}/${t.series.size}` : ''}`), el('b', null, tableStatus(t)));
+        if (g) c.append(el('span', 'hint', `${g.alive().length} en vie`));
+        c.append(el('p', 'mlast', t.last || '…'));
+        c.addEventListener('click', () => { mosaic = false; activate(t); renderTabs(); });
+        grid.append(c);
+      }
+    }
+  }
+
+  // Affiche une table : l'écran est reconstruit depuis les événements de sa partie.
+  function activate(t) {
+    active = t; game = t.game; human = t.human; t.unseen = 0;
+    $('idle').hidden = true; $('game').hidden = false;
+    $('stop-confirm').hidden = true;
+    if (human) $('reveal').checked = false;
+    $('reveal').disabled = !!human && running(t);
+    const sr = t.series;
+    $('series-label').hidden = !(sr && game?.series);
+    if (sr && game?.series) $('series-label').textContent = `Série · partie ${game.series.index} sur ${sr.size}${sr.memoryGames ? ` · mémoire : ${sr.memoryGames} partie${sr.memoryGames > 1 ? 's' : ''}` : ''}`;
+    rerenderFeed();
+    if (t.resumedAt) $('feed').append(el('li', 'ev narr', t.resumedAt));
+    showBanner();
+    renderPlayers(); updatePhase(); updatePause(); refreshThinking();
+    if (game && game.phase === 'end') renderResult(); else $('result').hidden = true;
+    if (humanResolve && t.human) setHumanOpen(true);
+  }
+
+  function banner(text) { if (active) { active.banner = text; showBanner(); } }
+  function showBanner() {
+    const text = active?.banner;
     let b = $('banner');
     if (!text) { if (b) b.remove(); return; }
     if (!b) { b = el('p', 'confirm error'); b.id = 'banner'; $('game').insertBefore(b, $('feed')); }
@@ -3803,16 +3938,19 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
   }
   $('pause-btn').addEventListener('click', () => {
     if (!game) return;
-    if (game.paused) { banner(''); autoPaused = false; game.resume(); } else game.pause();
-    updatePause();
+    if (game.paused) { active.banner = ''; active.autoPaused = false; showBanner(); game.resume(); } else game.pause();
+    updatePause(); renderTabs();
   });
   $('stop-btn').addEventListener('click', () => { $('stop-confirm').hidden = false; });
   $('stop-no').addEventListener('click', () => { $('stop-confirm').hidden = true; });
   $('stop-yes').addEventListener('click', () => {
     $('stop-confirm').hidden = true;
     if (!game) return;
-    game.stop(); abortAll();
-    if (humanResolve) humanResolve({ pensee: '', message: '…', cible: 0, vote: 0, sauver: false, empoisonner: 0 });
+    const t = active;
+    clearTimeout(t.nextTimer); t.nextTimer = null;
+    if (t.series && !t.persist) t.series.done = true;
+    game.stop(); abortAll(game);
+    if (humanResolve && t.human) humanResolve({ pensee: '', message: '…', cible: 0, vote: 0, sauver: false, empoisonner: 0 });
   });
   $('reveal').addEventListener('change', () => { renderPlayers(); rerenderFeed(); });
 
@@ -3835,8 +3973,6 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
   }
 
   const roleClass = (p) => ({ LOUP: 'wolf', VOYANTE: 'seer', SORCIERE: 'witch' }[p.roleKey] || 'village');
-  let debateRound = 0;
-  let ballots = 0;
 
   function updatePhase() {
     if (!game) return;
@@ -3845,12 +3981,12 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     $('band').className = `phase-band ${night ? 'night' : 'day'} ph-${game.phase}`;
     let t, sub, count = `${a} en vie`;
     if (night) { t = `Nuit ${game.day}`; sub = 'Le village dort. Les rôles agissent.'; }
-    else if (game.phase === 'mayor') { t = 'Présentations'; sub = 'Chacun se présente, puis le village élit son Maire.'; if (ballots) count = `${ballots} / ${a} votes`; }
-    else if (game.phase === 'vote') { t = 'Vote'; sub = `Jour ${game.day} · qui quitte le village ?`; count = `${ballots} / ${a} votes`; }
+    else if (game.phase === 'mayor') { t = 'Présentations'; sub = 'Chacun se présente, puis le village élit son Maire.'; if (active.ballots) count = `${active.ballots} / ${a} votes`; }
+    else if (game.phase === 'vote') { t = 'Vote'; sub = `Jour ${game.day} · qui quitte le village ?`; count = `${active.ballots} / ${a} votes`; }
     else if (game.phase === 'end') {
       t = 'Fin de partie'; count = '';
       sub = game.winner === 'village' ? 'Le Village l\'emporte.' : game.winner === 'loups' ? 'Les Loups-Garous l\'emportent.' : '';
-    } else { t = `Jour ${game.day}`; sub = debateRound ? `Débat · tour ${debateRound} sur ${game.debateRounds}` : 'Le village se réveille.'; }
+    } else { t = `Jour ${game.day}`; sub = active.debateRound ? `Débat · tour ${active.debateRound} sur ${game.debateRounds}` : 'Le village se réveille.'; }
     $('phase-label').textContent = t; $('phase-sub').textContent = sub; $('phase-count').textContent = count;
   }
 
@@ -3887,14 +4023,31 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
   }
   function nearBottom() { return window.innerHeight + window.scrollY >= document.body.scrollHeight - 160; }
 
-  function onEvent(ev) {
+  // Résumé d'une ligne pour la mosaïque : ce que le public a vu en dernier.
+  function lastLine(t, ev) {
+    const g = t.game;
+    if (ev.secret) return null;
+    if (ev.kind === 'speech') return `${g.get(ev.pid)?.name} : ${ev.message}`;
+    if (['dawn', 'vote', 'mayor', 'mayor_succession', 'end', 'error'].includes(ev.kind)) return ev.text;
+    return null;
+  }
+  function onEvent(t, ev) {
+    if (ev.kind === 'phase') { t.debateRound = 0; t.ballots = 0; }
+    if (ev.kind === 'speech') t.debateRound = ev.round;
+    if (ev.kind === 'ballot') t.ballots = ev.n;
+    const line = lastLine(t, ev);
+    if (line) { t.last = line; t.unseen++; }
+    if (t !== active) {
+      if (line || ev.kind === 'phase') renderTabs();
+      return;
+    }
+    if (ev.kind === 'ballot') { updatePhase(); return; }
     const stick = nearBottom();
     const li = renderEvent(ev);
     if (li) $('feed').append(li);
-    if (ev.kind === 'phase') { debateRound = 0; ballots = 0; }
-    if (ev.kind === 'speech' && ev.round !== debateRound) { debateRound = ev.round; updatePhase(); }
-    if (ev.kind === 'ballot') { ballots = ev.n; updatePhase(); return; }
-    if (['dawn', 'vote', 'end', 'phase', 'start', 'mayor', 'mayor_succession'].includes(ev.kind)) { renderPlayers(); updatePhase(); }
+    if (ev.kind === 'speech' && ev.round !== t.shownRound) { t.shownRound = ev.round; updatePhase(); }
+    if (['dawn', 'vote', 'end', 'phase', 'start', 'mayor', 'mayor_succession'].includes(ev.kind)) { renderPlayers(); updatePhase(); renderTabs(); }
+    else if (mosaic && line) renderTabs();
     if (stick && li) revealLatest(li, 'smooth');
   }
   function rerenderFeed() {
@@ -3977,7 +4130,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     return null;
   }
 
-  function renderResult(failed) {
+  function renderResult(failed = active?.failed) {
     const box = $('result'); box.textContent = ''; box.hidden = false;
     box.className = 'card result';
     if (failed || !game || game.winner === 'abandon') {
@@ -4008,24 +4161,33 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
       box.append(cast);
     }
     const row = el('div', 'row wrap');
-    if (series && !series.done && game?.series) {
+    const t = active, sr = t.series;
+    if (sr && !sr.done && game?.series) {
       const ok = !failed && game.winner !== 'abandon';
-      const next = el('button', 'primary', ok ? `Partie ${series.index} sur ${series.size}` : 'Reprendre la série'); next.type = 'button';
-      next.addEventListener('click', () => launch());
+      const next = el('button', 'primary', ok ? `Partie ${sr.index} sur ${sr.size}` : 'Reprendre la série'); next.type = 'button';
+      next.addEventListener('click', () => launch(t));
       const quit = el('button', 'ghost danger', 'Arrêter la série'); quit.type = 'button';
-      quit.addEventListener('click', () => { clearTimeout(nextTimer); series = null; store.set('lga.series', null); box.querySelector('.countdown')?.remove(); next.remove(); quit.remove(); });
+      quit.addEventListener('click', () => {
+        clearTimeout(t.nextTimer); t.nextTimer = null; sr.done = true;
+        if (t.persist) { series = null; store.set('lga.series', null); }
+        box.querySelector('.countdown')?.remove(); next.remove(); quit.remove(); renderTabs();
+      });
       row.append(next, quit);
-      if (ok) {
+      if (t.nextTimer) {
         const cd = el('p', 'hint countdown'); box.append(cd);
-        let left = 10;
-        const tick = () => { if (!box.contains(cd)) return; if (left <= 0) { launch(); return; } cd.textContent = `Partie suivante dans ${left} s.`; left--; nextTimer = setTimeout(tick, 1000); };
+        const tick = () => {
+          if (!box.contains(cd) || active !== t) return;
+          if (!t.nextTimer) { cd.remove(); return; }
+          cd.textContent = `Partie suivante dans ${Math.max(0, Math.ceil((t.nextAt - Date.now()) / 1000))} s.`;
+          setTimeout(tick, 500);
+        };
         tick();
       }
       box.append(row);
       updatePause(); updatePhase();
       return;
     }
-    if (series?.done && game?.series) box.append(el('p', 'ok-line', `Série terminée : ${series.size} parties jouées. Compare les modèles dans Stats.`));
+    if (sr?.done && game?.series) box.append(el('p', 'ok-line', `Série terminée : ${sr.size} parties jouées. Compare les modèles dans Stats.`));
     const again = el('button', 'primary', 'Rejouer'); again.type = 'button'; again.addEventListener('click', startGame);
     const st = el('button', 'ghost', 'Voir les stats'); st.type = 'button'; st.addEventListener('click', () => show('stats'));
     row.append(again, st); box.append(row);
@@ -4205,7 +4367,7 @@ return { Game, aggregate, botAgent, seatLabel, ROLE, presetCompo, compoKeys, com
     if (freshConfig && envReady && !config.touched) config.seats = null;
     sanitizeSeats(); if (envReady) saveConfig();
     renderEnv(); renderCompo(); renderRoster(); renderSeats();
-    $('rounds').value = String(config.rounds); $('maxdays').value = String(config.maxDays); $('turn-limit').value = String(config.turnLimit); $('fix-roles').checked = config.fixRoles;
+    $('rounds').value = String(config.rounds); $('maxdays').value = String(config.maxDays); $('turn-limit').value = String(config.turnLimit); $('fix-roles').checked = config.fixRoles; $('parallel').value = String(config.parallel);
     $('mayor').checked = config.mayor; $('series-size').value = String(config.seriesSize); $('memory').value = String(config.memory);
     $('memory-wrap').hidden = config.seriesSize < 2;
     renderIdle();
