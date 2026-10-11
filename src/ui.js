@@ -12,7 +12,12 @@
   // Adresse de la version web hébergée (OpenRouter), affichée dans la version Claude.
   const HOSTED_URL = '__HOSTED_URL__';
   const IN_CLAUDE = !!(window.claude && typeof window.claude.use === 'function');
-  const env = { openrouter: !IN_CLAUDE, claude: false };
+  const env = { openrouter: !IN_CLAUDE, claude: false, gemini: !IN_CLAUDE };
+  // Fournisseurs appelés en direct avec leur propre clé (en plus d'OpenRouter). Dans « Mes IA »,
+  // leurs modèles portent le préfixe « fournisseur: » ; un siège garde { provider, model } sans préfixe.
+  // Pour en ajouter un : une entrée ici (champ de clé dans body.html), ses fonctions list/check,
+  // son appel dans agent() et son libellé de stats dans Engine.seatLabel.
+  const DIRECT = { gemini: { name: 'Gemini', tag: 'clé Gemini', keyName: 'lga.key.gemini', input: 'gm-key' } };
   let sample = null;
 
   const DEFAULT_OR = ['google/gemini-2.5-flash', 'meta-llama/llama-3.3-70b-instruct', 'deepseek/deepseek-chat-v3.1', 'mistralai/mistral-medium-3.1'];
@@ -71,10 +76,31 @@
       note.textContent = 'Aucun modèle n\'est disponible ici : seuls les bots aléatoires et toi pouvez jouer.';
     }
     $('key-block').hidden = !env.openrouter;
+    $('direct-keys').hidden = !Object.keys(DIRECT).some((k) => env[k]);
     $('roster-card').hidden = !env.openrouter;
     $('or-key').value = store.get('lga.key', '');
   }
   $('or-key').addEventListener('change', (e) => store.set('lga.key', e.target.value.trim()));
+  for (const [k, d] of Object.entries(DIRECT)) {
+    if (!env[k]) continue;
+    const inp = $(d.input);
+    inp.value = store.get(d.keyName, '');
+    if (inp.value) $('direct-keys').open = true;
+    const save = () => { const v = inp.value.trim(); if (v === store.get(d.keyName, '')) return false; store.set(d.keyName, v); loadModelList(); renderSeats(); return true; };
+    inp.addEventListener('change', save);
+    $(`${d.input}-toggle`).addEventListener('click', () => { const h = inp.type === 'password'; inp.type = h ? 'text' : 'password'; $(`${d.input}-toggle`).textContent = h ? 'Masquer' : 'Voir'; });
+    $(`${d.input}-check`).addEventListener('click', async () => {
+      save();
+      const st = $(`${d.input}-status`); const key = inp.value.trim();
+      if (!key) { st.textContent = `Colle d'abord ta clé ${d.name}.`; st.className = 'hint'; return; }
+      st.textContent = 'Vérification…'; st.className = 'hint';
+      try {
+        const r = await DIRECT[k].check(key);
+        st.textContent = r.ok ? `${r.text} Cherche « ${d.name.toLowerCase()} » dans « Ajouter une IA » : les modèles marqués « ${d.tag} » passent par elle.` : r.text;
+        st.className = r.ok ? 'hint ok' : 'error';
+      } catch (_) { st.textContent = `${d.name} injoignable. Vérifie ta connexion.`; st.className = 'error'; }
+    });
+  }
   $('or-key-toggle').addEventListener('click', () => {
     const i = $('or-key'); const hidden = i.type === 'password';
     i.type = hidden ? 'text' : 'password'; $('or-key-toggle').textContent = hidden ? 'Masquer' : 'Voir';
@@ -83,6 +109,7 @@
   function providerOptions() {
     const o = [];
     if (env.openrouter) o.push(['openrouter', 'OpenRouter']);
+    for (const [k, d] of Object.entries(DIRECT)) if (env[k] && (store.get(d.keyName, '') || config.seats?.some((s) => s.provider === k))) o.push([k, `${d.name} (clé directe)`]);
     if (env.claude) o.push(['claude', 'Claude']);
     o.push(['bot', 'Bot aléatoire'], ['human', 'Toi (humain)']);
     return o;
@@ -99,17 +126,22 @@
       sel.addEventListener('change', () => {
         const p = sel.value;
         if (p === 'human') config.seats.forEach((s, j) => { if (j !== i && s.provider === 'human') config.seats[j] = defaultSeat(j); });
-        config.seats[i] = p === 'openrouter' ? { provider: p, model: config.roster[i % config.roster.length] || DEFAULT_OR[0] } : p === 'claude' ? { provider: p, model: 'quick' } : { provider: p, model: p };
+        const mine = (prov) => config.roster.map(seatFromRosterId).filter((s) => s.provider === prov);
+        if (p === 'openrouter' || DIRECT[p]) {
+          const list = mine(p);
+          config.seats[i] = list[i % (list.length || 1)] || { provider: p, model: p === 'openrouter' ? DEFAULT_OR[0] : '' };
+        } else config.seats[i] = p === 'claude' ? { provider: p, model: 'quick' } : { provider: p, model: p };
         touch(); renderSeats();
       });
       li.append(sel);
       let m;
-      if (seat.provider === 'openrouter') {
+      if (isModelSeat(seat)) {
         m = el('select', 'model');
-        const ids = config.roster.includes(seat.model) || !seat.model ? config.roster : [seat.model, ...config.roster];
+        const cur = rosterIdOf(seat);
+        const ids = config.roster.includes(cur) || !seat.model ? config.roster : [cur, ...config.roster];
         for (const id of ids) { const o = el('option', null, modelName(id) + (isFree(id) ? ` (${FREE_NOTE})` : '')); o.value = id; m.append(o); }
-        m.value = seat.model;
-        m.addEventListener('change', () => { config.seats[i].model = m.value; touch(); });
+        m.value = cur;
+        m.addEventListener('change', () => { const role = config.seats[i].role; config.seats[i] = { ...seatFromRosterId(m.value), role }; touch(); renderSeats(); });
       } else if (seat.provider === 'claude') {
         m = el('select', 'model');
         for (const [v, t] of TIERS) { const o = el('option', null, t); o.value = v; m.append(o); }
@@ -169,6 +201,13 @@
   // ---------- Catalogue OpenRouter et « Mes IA » ----------
   let catalog = [];
   const modelName = (id) => catalog.find((m) => m.id === id)?.name || id;
+  const rosterIdOf = (seat) => (DIRECT[seat.provider] ? `${seat.provider}:${seat.model}` : seat.model);
+  const seatFromRosterId = (id) => {
+    const m = /^([a-z]+):(.+)$/.exec(id || '');
+    return m && DIRECT[m[1]] ? { provider: m[1], model: m[2] } : { provider: 'openrouter', model: id };
+  };
+  const isModelSeat = (s) => s.provider === 'openrouter' || !!DIRECT[s.provider];
+  const seatModelName = (s) => modelName(rosterIdOf(s));
   // Les variantes « :free » d'OpenRouter sont plafonnées (requêtes par minute et par jour) : elles calent souvent.
   const isFree = (id) => /:free$/.test(id || '');
   const FREE_NOTE = 'gratuit, débit limité';
@@ -178,14 +217,23 @@
     return inp === 0 && out === 0 ? 'gratuit' : `${inp.toFixed(2)} $ / ${out.toFixed(2)} $ par M tokens`;
   };
 
+  let directCatalog = [];
+  async function loadDirectModels() {
+    directCatalog = [];
+    for (const [k, d] of Object.entries(DIRECT)) {
+      const key = store.get(d.keyName, '');
+      if (!env[k] || !key) continue;
+      try { directCatalog.push(...(await d.list(key)).map((m) => ({ ...m, id: `${k}:${m.id}`, direct: k }))); } catch (_) { /* clé invalide : signalé par Vérifier */ }
+    }
+  }
   async function loadModelList() {
     if (!env.openrouter) return;
     $('catalog-status').textContent = 'Chargement du catalogue OpenRouter…';
     try {
-      const r = await fetch('https://openrouter.ai/api/v1/models');
+      const [r] = await Promise.all([fetch('https://openrouter.ai/api/v1/models'), loadDirectModels()]);
       const d = await r.json();
-      catalog = (d.data || []).map((m) => ({ id: m.id, name: m.name || m.id, pricing: m.pricing })).sort((a, b) => a.name.localeCompare(b.name));
-      $('catalog-status').textContent = `${catalog.length} modèles disponibles.`;
+      catalog = (d.data || []).map((m) => ({ id: m.id, name: m.name || m.id, pricing: m.pricing })).concat(directCatalog).sort((a, b) => a.name.localeCompare(b.name));
+      $('catalog-status').textContent = `${catalog.length} modèles disponibles${directCatalog.length ? `, dont ${directCatalog.length} avec ta clé directe` : ''}.`;
       const unknown = config.roster.filter((id) => !catalog.some((m) => m.id === id));
       if (unknown.length) $('catalog-status').textContent += ` Introuvable(s) dans le catalogue : ${unknown.join(', ')}. Retire-les ou remplace-les.`;
       renderRoster(); renderSeats(); renderResults();
@@ -199,6 +247,7 @@
     for (const id of config.roster) {
       const li = el('li'); li.title = id;
       const name = el('span', null, modelName(id)); if (isFree(id)) { li.classList.add('free'); li.title = `${id} : ${FREE_NOTE}`; }
+      const dp = seatFromRosterId(id).provider; if (DIRECT[dp]) { li.classList.add('direct'); li.dataset.tag = DIRECT[dp].tag; }
       const rm = el('button', null, '×'); rm.type = 'button'; rm.setAttribute('aria-label', `Retirer ${modelName(id)}`);
       rm.addEventListener('click', () => {
         config.roster = config.roster.filter((x) => x !== id); touch(); renderRoster(); renderResults(); renderSeats();
@@ -219,6 +268,7 @@
       const li = el('li');
       const info = el('div'); info.append(el('div', 'mname', m.name), el('div', 'mid', `${m.id}${price(m) ? ' · ' + price(m) : ''}`));
       if (isFree(m.id)) info.append(el('div', 'warn-free', 'Gratuit mais limité par OpenRouter : il peut rester bloqué ou passer son tour en pleine partie.'));
+      if (m.direct) info.append(el('div', 'tag-direct', `Appelé en direct avec ta ${DIRECT[m.direct].tag}, sans passer par OpenRouter.`));
       const added = config.roster.includes(m.id);
       const b = el('button', added ? 'ghost' : 'primary', added ? 'Ajoutée' : 'Ajouter'); b.type = 'button'; b.disabled = added;
       b.addEventListener('click', () => { config.roster.push(m.id); touch(); renderRoster(); renderResults(); renderSeats(); });
@@ -230,7 +280,7 @@
   $('spread-btn').addEventListener('click', () => {
     if (!config.roster.length) { $('catalog-status').textContent = 'Ajoute au moins une IA avant de répartir.'; return; }
     let k = 0;
-    config.seats = config.seats.map((s) => (s.provider === 'human' ? s : { provider: 'openrouter', model: config.roster[k++ % config.roster.length] }));
+    config.seats = config.seats.map((s) => (s.provider === 'human' ? s : { ...seatFromRosterId(config.roster[k++ % config.roster.length]), role: s.role }));
     touch(); renderSeats();
     $('catalog-status').textContent = `${config.roster.length} IA réparties sur ${k} sièges.`;
   });
@@ -320,6 +370,80 @@
     throw slowErr('service surchargé');
   }
 
+  // ---------- Gemini en direct (clé Google AI Studio) ----------
+  const GEMINI = 'https://generativelanguage.googleapis.com/v1beta';
+  DIRECT.gemini.list = async (key) => {
+    const r = await fetch(`${GEMINI}/models?pageSize=1000&key=${encodeURIComponent(key)}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    return (d.models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent') && /^models\/gemini/.test(m.name) && !/embedding|tts|image|audio|live|vision/i.test(m.name))
+      .map((m) => { const id = m.name.replace(/^models\//, ''); return { id, name: `${m.displayName || id} (clé Gemini)` }; });
+  };
+  DIRECT.gemini.check = async (key) => {
+    const r = await fetch(`${GEMINI}/models?pageSize=1&key=${encodeURIComponent(key)}`);
+    if (r.ok) return { ok: true, text: 'Clé Gemini valide.' };
+    return { ok: false, text: r.status === 400 || r.status === 403 ? 'Clé refusée par Google. Vérifie qu\'elle est complète.' : `Google répond ${r.status}.` };
+  };
+
+  async function callGemini(model, system, prompt, game) {
+    const key = store.get(DIRECT.gemini.keyName, '');
+    const limit = (game.turnLimit || 45) * 1000;
+    let deadline = Date.now() + limit;
+    const left = () => deadline - Date.now();
+    const wait = async (ms) => { if (left() < ms + 3000) throw slowErr(`pas de réponse en ${limit / 1000} s`); await sleep(ms); };
+    // Réflexion réduite, comme l'effort « low » demandé via OpenRouter.
+    let thinking = /gemini-2\.5/.test(model) ? { thinkingBudget: /pro/.test(model) ? 512 : 0 } : /gemini-[3-9]/.test(model) ? { thinkingLevel: 'low' } : null;
+    let useFormat = true;
+    let maxTokens = 2000;
+    for (let i = 0; i < 4; i++) {
+      if (left() < 2000) throw slowErr(`pas de réponse en ${limit / 1000} s`);
+      const ctl = newCtl();
+      let timedOut = false;
+      ctl.timer = setTimeout(() => { timedOut = true; ctl.abort(); }, left());
+      const t0 = Date.now();
+      let res, data;
+      try {
+        res = await fetch(`${GEMINI}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
+          method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: system }] },
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.9, maxOutputTokens: maxTokens + 1000,
+              ...(useFormat ? { responseMimeType: 'application/json' } : {}),
+              ...(thinking ? { thinkingConfig: thinking } : {}),
+            },
+          }),
+        });
+        data = await res.json().catch(() => null);
+      } catch (e) {
+        ctl.done();
+        if (game.stopped) throw e;
+        if (document.hidden || game.paused) { await game.gate(); deadline += Date.now() - t0; i--; continue; }
+        if (timedOut) throw slowErr(`pas de réponse en ${limit / 1000} s`);
+        if (i < 3) { await wait(1500 * (i + 1)); continue; }
+        throw new Error('réseau injoignable');
+      }
+      ctl.done();
+      const msg = data?.error?.message || `HTTP ${res.status}`;
+      if (res.status === 400 && /api key/i.test(msg) || res.status === 401 || res.status === 403) throw fatal('Clé Gemini refusée. Vérifie-la dans Réglages.');
+      if (res.status === 404) throw fatal(`Modèle introuvable chez Google : ${model}`);
+      if (/token count|exceeds the maximum|context/i.test(msg) && res.status === 400) throw slowErr('historique trop long pour ce modèle');
+      if (res.status === 400 && thinking) { thinking = null; continue; }
+      if (res.status === 400 && useFormat) { useFormat = false; continue; }
+      if (res.status === 429 && /per ?day|PerDay/i.test(msg)) throw slowErr('quota Gemini du jour atteint');
+      if (res.status === 429 || res.status >= 500) { await wait(4000 * (i + 1)); continue; }
+      if (!res.ok) throw new Error(msg);
+      const cand = data?.candidates?.[0];
+      const c = (cand?.content?.parts || []).filter((p) => !p.thought && p.text).map((p) => p.text).join('');
+      if (!c && cand?.finishReason === 'MAX_TOKENS' && maxTokens < 6000 && left() > 15000) { maxTokens = 6000; continue; }
+      if (!c) throw new Error(cand?.finishReason ? `réponse vide (${cand.finishReason})` : 'réponse vide');
+      return c;
+    }
+    throw slowErr('service Gemini surchargé');
+  }
+
   async function callClaude(tier, system, prompt, game) {
     const run = () => {
       const ctl = newCtl();
@@ -377,7 +501,7 @@
     if (s >= 10) {
       text += ` ${s} s`;
       const slowest = list.reduce((a, b) => (a.t0 <= b.t0 ? a : b));
-      const who = slowest.p.seat.provider === 'openrouter' && canReveal() ? ` (${modelName(slowest.p.seat.model)})` : '';
+      const who = isModelSeat(slowest.p.seat) && canReveal() ? ` (${seatModelName(slowest.p.seat)})` : '';
       if (s >= 20) text += ` · ${slowest.p.name}${who} est lent, limite ${game?.turnLimit || config.turnLimit} s`;
     }
     setThinking(text);
@@ -404,6 +528,7 @@
         case 'bot': await sleep(task.kind === 'speech' ? 500 : 150); return Engine.botAgent(p, task);
         case 'human': return await humanTurn(p, task);
         case 'openrouter': return await callOpenRouter(p.seat.model, task.system, task.prompt, task.game);
+        case 'gemini': return await callGemini(p.seat.model, task.system, task.prompt, task.game);
         case 'claude': return await callClaude(p.seat.model, task.system, task.prompt, task.game);
       }
       throw fatal('Fournisseur inconnu');
@@ -436,9 +561,12 @@
     if (seats.some((s) => s.provider === 'openrouter')) {
       const key = $('or-key').value.trim(); store.set('lga.key', key);
       if (!key) return 'Colle ta clé OpenRouter avant de lancer la partie.';
-      const empty = seats.findIndex((s) => s.provider === 'openrouter' && !s.model);
-      if (empty >= 0) return `Le siège ${empty + 1} n'a pas de modèle.`;
     }
+    for (const [k, d] of Object.entries(DIRECT)) {
+      if (seats.some((s) => s.provider === k) && !store.get(d.keyName, '')) return `Colle ta clé ${d.name} dans Réglages avant de lancer la partie.`;
+    }
+    const empty = seats.findIndex((s) => isModelSeat(s) && !s.model);
+    if (empty >= 0) return `Le siège ${empty + 1} n'a pas de modèle.`;
     if (seats.some((s) => s.provider === 'claude') && !sample) return 'Claude n\'est pas disponible ici. Choisis d\'autres joueurs.';
     return '';
   }
@@ -501,7 +629,7 @@
       maxDays: inSeries ? series.maxDays : config.maxDays,
       mayor: inSeries ? series.mayor : config.mayor,
       minNightMs: seats.some((s) => s.provider === 'human') ? 8000 : 0,
-      parallelVotes: seats.every((s) => s.provider === 'openrouter' || s.provider === 'bot'),
+      parallelVotes: seats.every((s) => isModelSeat(s) || s.provider === 'bot'),
     };
     if (inSeries) {
       const sr = series;
@@ -693,7 +821,7 @@
       case 'dawn': return el('li', 'ev narr', ev.text);
       case 'error': {
         const q = game?.get(ev.pid);
-        const mdl = q && q.seat.provider === 'openrouter' ? `${modelName(q.seat.model)}, ` : '';
+        const mdl = q && isModelSeat(q.seat) ? `${seatModelName(q.seat)}, ` : '';
         return el('li', 'ev error', canReveal() && ev.detail ? `${ev.text} (${mdl}${ev.detail})` : ev.text);
       }
       case 'end': { const li = el('li', 'ev narr'); li.append(el('strong', null, ev.text)); return li; }

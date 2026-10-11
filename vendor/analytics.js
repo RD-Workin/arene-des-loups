@@ -124,6 +124,8 @@
       seed: game.seed,
       app: extra.app ?? null,
       synthetic: extra.synthetic ?? false,
+      // Rôles imposés à la main (partie de test) : hors classements
+      forcedRoles: game.players.some((p) => !!p.seat.role) || !!extra.forcedRoles || undefined,
       // Série : plusieurs parties avec les mêmes sièges et une mémoire des parties précédentes
       series: extra.series ?? game.series ?? null,
       config: {
@@ -294,10 +296,11 @@
     const includeHumans = !!opts.includeHumans;
     const by = new Map();
     const games = [];
-    const totals = { games: 0, village: 0, loups: 0, egalite: 0, days: [], ignored: 0 };
+    const totals = { games: 0, village: 0, loups: 0, egalite: 0, days: [], ignored: 0, tests: 0 };
 
     for (const log of logs) {
       if (!log || validateLog(log).length || log.outcome.winner === 'abandon') { totals.ignored++; continue; }
+      if (log.forcedRoles && !opts.includeTests) { totals.tests++; continue; } // partie de test (rôles imposés)
       totals.games++;
       totals[log.outcome.winner]++;
       totals.days.push(log.outcome.days);
@@ -464,11 +467,11 @@
       });
     }
 
-    const seriesInfo = computeSeries(logs.filter((l) => l && !validateLog(l).length && l.outcome.winner !== 'abandon'), groupBy, by, includeHumans);
+    const seriesInfo = computeSeries(logs.filter((l) => l && !validateLog(l).length && l.outcome.winner !== 'abandon' && (!l.forcedRoles || opts.includeTests)), groupBy, by, includeHumans);
     const models = [...by.values()].map(finish).sort((a, b) => (b.winRate ?? -1) - (a.winRate ?? -1) || b.games - a.games);
     return {
       totals: {
-        games: totals.games, ignored: totals.ignored,
+        games: totals.games, ignored: totals.ignored, tests: totals.tests,
         villageWins: totals.village, wolfWins: totals.loups, draws: totals.egalite,
         villageWinRate: ratio(totals.village, totals.games),
         avgDays: mean(totals.days),
@@ -759,9 +762,23 @@ Réponds en JSON : {"scores": [{"seq": numéro, "logique": n, "persuasion": n, "
     return logs;
   }
 
+  // Version allégée d'un log pour en garder beaucoup dans le stockage du navigateur :
+  // retire les pensées privées, textes techniques et horodatages, tronque les discours. Les métriques restent identiques
+  // (seul le juge IA perd les pensées).
+  function compactLog(log, { maxMessage = 400 } = {}) {
+    const out = { ...log, compact: true };
+    out.events = log.events.map((e) => {
+      const { thought, text, t, usage, ...rest } = e;
+      if (typeof rest.message === 'string' && rest.message.length > maxMessage) rest.message = rest.message.slice(0, maxMessage) + '…';
+      if (typeof rest.error === 'string') rest.error = rest.error.slice(0, 120);
+      return rest;
+    });
+    return out;
+  }
+
   const api = {
     FORMAT, VERSION, ROLES,
-    fromEngine, validateLog, analyzeClaims, computeMetrics, hostileActions,
+    fromEngine, validateLog, analyzeClaims, computeMetrics, hostileActions, compactLog,
     judgeLog, judgeLogs, judgePrompt, wilson, normalizeRole,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

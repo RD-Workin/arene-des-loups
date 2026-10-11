@@ -25,6 +25,16 @@
         </div>
         <p id="key-status" class="hint">La clé reste dans ce navigateur, sur ton téléphone. Elle n'est envoyée qu'à OpenRouter.</p>
         <p class="hint">Conseil : crée une clé avec un plafond de crédit sur openrouter.ai. Si tu ajoutes la page à l'écran d'accueil, elle garde sa propre clé et ses propres stats, séparées de Safari.</p>
+        <details id="direct-keys" class="memo">
+          <summary>Clés directes (facultatif)</summary>
+          <label for="gm-key">Clé Google Gemini (AI Studio)</label>
+          <div class="row">
+            <input id="gm-key" type="password" autocomplete="off" spellcheck="false" placeholder="AIza…">
+            <button id="gm-key-toggle" class="ghost" type="button">Voir</button>
+            <button id="gm-key-check" class="ghost" type="button">Vérifier</button>
+          </div>
+          <p id="gm-key-status" class="hint">Facultatif : les modèles Gemini sont déjà disponibles via OpenRouter. Ta clé Google permet de les appeler en direct, sur ton quota ou tes crédits Google. Elle reste sur ce téléphone et n'est envoyée qu'à Google.</p>
+        </details>
       </div>
     </div>
 

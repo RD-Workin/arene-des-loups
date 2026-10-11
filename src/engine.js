@@ -852,6 +852,8 @@ class StopGame extends Error { constructor() { super('Partie interrompue'); } }
 function seatLabel(seat) {
   if (seat.provider === 'human') return 'Humain';
   if (seat.provider === 'bot') return 'Bot aléatoire';
+  // Gemini appelé en direct : même libellé que via OpenRouter, pour regrouper les stats du même modèle.
+  if (seat.provider === 'gemini') return `google/${seat.model}`;
   if (seat.provider === 'claude') return `Claude (${{ quick: 'rapide', default: 'standard', complex: 'avancé' }[seat.model] || seat.model})`;
   return seat.model;
 }

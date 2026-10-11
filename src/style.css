@@ -327,3 +327,10 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
 /* Rôles imposés (tests) */
 .seat.with-role { grid-template-columns: 2.2rem minmax(0, 9rem) minmax(0, 1fr) minmax(0, 9rem); }
 @media (max-width: 460px) { .seat.with-role { grid-template-columns: 1.6rem minmax(0, 1fr); } .seat .role-pick { grid-column: 2; } }
+
+/* Modèles appelés avec une clé directe */
+.roster li.direct span::after { content: " · " attr(data-tag); color: var(--muted); }
+.roster li.direct span { }
+.tag-direct { font-size: .78rem; color: var(--muted); }
+#direct-keys { margin-top: 8px; }
+#direct-keys[open] { display: grid; gap: 8px; }
