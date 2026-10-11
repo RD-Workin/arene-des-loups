@@ -661,15 +661,17 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
         case 'speech':
           push({
             type: 'speech', actor: ev.pid, round: ev.round, message: ev.message, thought: ev.pensee ?? null,
+            fallback: !!ev.fallback, leaks: ev.leaks || 0,
             claims: (ev.claims || []).map((c) => ({ target: c.joueur, role: c.role })),
           }, ev);
           break;
         case 'vote':
-          for (const v of ev.votes || []) push({ type: 'vote', actor: v.from, target: v.to, weight: v.weight ?? 1, thought: v.pensee ?? null }, ev);
+          // to: null = vote blanc (par ex. hors délai, fallback: true)
+          for (const v of ev.votes || []) push({ type: 'vote', actor: v.from, target: v.to ?? null, weight: v.weight ?? 1, fallback: !!v.fallback, thought: v.pensee ?? null }, ev);
           push({ type: 'elimination', target: ev.eliminated ?? null, role: ev.eliminated ? P.get(ev.eliminated)?.role : null }, ev);
           break;
         case 'error':
-          push({ type: 'error', actor: ev.pid, task: ev.task ?? null, error: ev.text }, ev);
+          push({ type: 'error', actor: ev.pid, task: ev.task ?? null, error: ev.detail ?? ev.text, text: ev.text ?? null }, ev);
           break;
         case 'wolf_chat': // canal secret de la meute, la nuit
           push({ type: 'wolf_chat', actor: ev.pid, round: ev.round ?? null, message: ev.message, proposal: ev.proposal ?? null, thought: ev.pensee ?? null }, ev);
@@ -679,7 +681,7 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
           push({ type: 'wolf_decision', target: ev.target, unanimous: !!ev.unanimous, random: !!ev.random }, ev);
           break;
         case 'mayor': // élection du maire : votes + élu
-          for (const v of ev.votes || []) push({ type: 'mayor_vote', actor: v.from, target: v.to, thought: v.pensee ?? null }, ev);
+          for (const v of ev.votes || []) push({ type: 'mayor_vote', actor: v.from, target: v.to ?? null, fallback: !!v.fallback, thought: v.pensee ?? null }, ev);
           push({ type: 'mayor_elected', target: ev.elected ?? null }, ev);
           break;
         case 'mayor_succession': // le maire mort désigne son successeur
@@ -719,6 +721,8 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
         },
         role: p.role,
         team: teamOf(p.role),
+        // Compteurs techniques du moteur (facultatif) : appels, durée, hors délai, fuites d'identité
+        stats: p.stats ? pickStats(p.stats) : null,
       })),
       outcome: {
         winner: game.winner,
@@ -727,6 +731,13 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
       },
       events,
     };
+  }
+
+  const STAT_KEYS = ['calls', 'callMs', 'timeouts', 'errors', 'fallbacks', 'identityLeaks'];
+  function pickStats(st) {
+    const o = {};
+    for (const k of STAT_KEYS) if (typeof st[k] === 'number') o[k] = st[k];
+    return o;
   }
 
   function defaultLabel(seat) {
@@ -847,6 +858,8 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
       decisions: 0, errors: 0,
       judge: { logique: [], persuasion: [], strategie: [] },
       tokens: 0, cost: 0, latency: [],
+      calls: 0, callMs: 0, callsKnown: 0, timeouts: 0, rawErrors: 0, identityLeaks: 0,
+      votesCast: 0, blankVotes: 0, timeoutVotes: 0,
       packVotes: 0, packFollowed: 0, packCouncils: 0, packUnanimous: 0, packMessages: 0,
       mayorGames: 0, mayorElected: 0, mayorWins: 0, mayorVoteShare: [], mayorWolf: 0,
       prog: [], // par rang de partie dans la série : { games, wins, vv, vvw, acc, accGood }
@@ -914,6 +927,12 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
           if (mayorEv.target === p.id) { s.mayorElected++; if (won) s.mayorWins++; if (p.role === WOLF) s.mayorWolf++; }
         }
         if (idx != null) { const g = prog(s); g.games++; if (won) g.wins++; }
+        if (p.stats) {
+          if (typeof p.stats.calls === 'number') { s.calls += p.stats.calls; s.callMs += p.stats.callMs || 0; s.callsKnown++; }
+          s.timeouts += p.stats.timeouts || 0;
+          s.rawErrors += p.stats.errors || 0;
+          s.identityLeaks += p.stats.identityLeaks || 0;
+        }
       }
 
       // Par jour : accusations publiques puis votes, pour mesurer la persuasion
@@ -952,6 +971,7 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
             const team = P.get(e.actor).team;
             const r = claimsBySeq.get(e.seq);
             if (s) { s.speeches++; s.speechesByTeam[team]++; s.words += words(e.message); }
+            if (s && !P.get(e.actor).stats) s.identityLeaks += e.leaks || 0;
             for (const c of r ? r.claims : []) {
               if (c.role === WOLF && !c.self) {
                 if (!accusations.has(e.day)) accusations.set(e.day, []);
@@ -970,10 +990,15 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
             if (j && s) for (const f of ['logique', 'persuasion', 'strategie']) if (typeof j[f] === 'number') s.judge[f].push(j[f]);
             break;
           }
+          case 'mayor_vote':
+            if (s) { s.votesCast++; if (e.target == null) { s.blankVotes++; if (e.fallback) s.timeoutVotes++; } }
+            break;
           case 'vote': {
             if (!votesOfDay.has(e.day)) votesOfDay.set(e.day, []);
             votesOfDay.get(e.day).push({ actor: e.actor, target: e.target });
             if (!s) break;
+            s.votesCast++;
+            if (e.target == null) { s.blankVotes++; if (e.fallback) s.timeoutVotes++; break; } // vote blanc : hors précision
             const voter = P.get(e.actor), target = P.get(e.target);
             if (voter.team === 'village') {
               s.villageVotes++; if (target.role === WOLF) s.villageVotesOnWolf++;
@@ -1179,7 +1204,16 @@ input[type="search"] { font: inherit; font-size: 16px; font-weight: 400; color: 
         witchSaveRate: ratio(s.witchSaves, s.witchSavesAvailable),
         witchPoisonAccuracy: ratio(s.witchPoisonWolf, s.witchPoisonWolf + s.witchPoisonVillage),
       },
-      reliability: { decisions: s.decisions, errors: s.errors, errorRate: ratio(s.errors, s.decisions + s.errors) },
+      reliability: {
+        decisions: s.decisions, errors: s.errors, errorRate: ratio(s.errors, s.decisions + s.errors),
+        votesCast: s.votesCast, blankVotes: s.blankVotes, blankRate: ratio(s.blankVotes, s.votesCast), timeoutVotes: s.timeoutVotes,
+        calls: s.callsKnown ? s.calls : null,
+        avgCallMs: s.callsKnown ? ratio(s.callMs, s.calls) : null,
+        timeouts: s.timeouts,
+        timeoutRate: s.callsKnown ? ratio(s.timeouts, s.calls) : null,
+        identityLeaks: s.identityLeaks,
+        identityLeaksPerGame: ratio(s.identityLeaks, s.games),
+      },
       judge: {
         n: s.judge.logique.length,
         logique: avg(s.judge.logique),
@@ -1230,12 +1264,12 @@ Réponds uniquement avec un objet JSON valide.`;
       else if (e.type === 'wolf') lines.push(`[Nuit ${e.day}] (secret) Loup ${name(e.actor)} propose ${name(e.target)}${e.packMessage ? ` : « ${e.packMessage} »` : ''}.`);
       else if (e.type === 'wolf_chat') lines.push(`[Nuit ${e.day}] (canal des loups) ${name(e.actor)} : « ${e.message} »${e.proposal ? ` (propose ${name(e.proposal)})` : ''}`);
       else if (e.type === 'wolf_decision') lines.push(`[Nuit ${e.day}] (secret) La meute attaque ${name(e.target)}${e.unanimous ? ' à l\'unanimité' : e.random ? ' (tirage au sort)' : ' (majorité)'}.`);
-      else if (e.type === 'mayor_vote') lines.push(`[Élection du maire] ${name(e.actor)} → ${name(e.target)}`);
+      else if (e.type === 'mayor_vote') lines.push(`[Élection du maire] ${name(e.actor)} → ${e.target != null ? name(e.target) : 'vote blanc'}`);
       else if (e.type === 'mayor_elected') lines.push(`[Élection du maire] Élu : ${e.target ? name(e.target) : 'personne'}`);
       else if (e.type === 'witch') lines.push(`[Nuit ${e.day}] (secret) Sorcière ${name(e.actor)} : ${e.saved ? 'sauve' : 'ne sauve pas'} ${e.attacked ? name(e.attacked) : ''}${e.poison ? `, empoisonne ${name(e.poison)}` : ''}.`);
       else if (e.type === 'dawn') lines.push(`[Aube ${e.day}] Morts : ${(e.dead || []).map((d) => `${name(d.pid)} (${d.role})`).join(', ') || 'aucun'}.`);
       else if (e.type === 'speech') lines.push(`#${e.seq} [${e.phase === 'mayor' ? 'Campagne du maire' : `Jour ${e.day}`}] ${name(e.actor)} dit : « ${e.message} »${e.thought ? `  (pensée privée : ${e.thought})` : ''}`);
-      else if (e.type === 'vote') lines.push(`[Vote ${e.day}] ${name(e.actor)} → ${name(e.target)}`);
+      else if (e.type === 'vote') lines.push(`[Vote ${e.day}] ${name(e.actor)} → ${e.target != null ? name(e.target) : 'vote blanc'}`);
       else if (e.type === 'elimination') lines.push(`[Vote ${e.day}] Éliminé : ${e.target ? `${name(e.target)} (${e.role})` : 'personne (égalité)'}`);
     }
     lines.push('');
@@ -1613,19 +1647,21 @@ class Game {
       : '';
     const past = this.memoryFor ? this.memoryFor(p) : '';
     const memory = past ? `\nTES PARTIES PRÉCÉDENTES CONTRE LES MÊMES ADVERSAIRES (mêmes pseudonymes, rôles tirés à nouveau au hasard à chaque partie) :\n${past}\n` : '';
+    // Ordre choisi pour le cache des fournisseurs : ce qui ne change pas (règles, mémoire, rôle)
+    // vient d'abord, puis l'historique qui ne fait que s'allonger, et l'état du moment à la fin.
     return `${this.rules}
 ${memory}
 
 TOI
-Tu es ${p.name}. Ton rôle secret : ${p.role}.${potions}
+Tu es ${p.name}. Ton rôle secret : ${p.role}.
 Ce que toi seul sais :
 ${mem}
-${pack}
-ÉTAT
-${this.phase === 'night' ? `Nuit ${this.day}` : this.phase === 'mayor' ? 'Présentations et élection du Maire, avant la première nuit' : `Jour ${this.day}`}. Vivants : ${a}. Morts : ${dead}.${this.mayor ? ` Maire : ${this.mayor.name}.` : ''}
 
 HISTORIQUE PUBLIC
-${hist}`;
+${hist}
+${pack}
+ÉTAT
+${this.phase === 'night' ? `Nuit ${this.day}` : this.phase === 'mayor' ? 'Présentations et élection du Maire, avant la première nuit' : `Jour ${this.day}`}. Vivants : ${a}. Morts : ${dead}.${this.mayor ? ` Maire : ${this.mayor.name}.` : ''}${potions}`;
   }
 
   // Historique public envoyé aux joueurs. Les annonces du MJ (morts, votes, Maire) restent
@@ -1745,8 +1781,9 @@ ${hist}`;
     this.pub(`--- Nuit ${this.day} ---`);
     const nightStart = Date.now();
 
-    // 1. Voyante
+    // 1. Voyante, en même temps que les Loups (indépendants : on gagne un tour d'attente)
     const seer = this.alive().find((p) => p.roleKey === 'VOYANTE');
+    const seerTurn = async () => {
     if (!seer) await this.padTurn();
     if (seer) {
       const options = this.alive().filter((q) => q.id !== seer.id);
@@ -1764,11 +1801,15 @@ Réponds en JSON : {"pensee": "ton raisonnement privé, 1 à 3 phrases", "cible"
       if (this.isWolf(t)) seer.stats.seerFound++;
       this.emit({ kind: 'night', role: 'seer', secret: true, pid: seer.id, target: t.id, pensee: o.pensee, text: `La Voyante (${seer.name}) sonde ${t.name} : ${t.role}.` });
     }
+    };
 
     // 2. Loups : discussion sur le canal secret, puis vote de la meute
     const wolves = this.alive().filter((p) => this.isWolf(p));
     const preys = this.alive().filter((p) => !this.isWolf(p));
-    const victim = wolves.length === 1 ? await this.loneWolf(wolves[0], preys) : await this.wolfCouncil(wolves, preys);
+    const pack = () => (wolves.length === 1 ? this.loneWolf(wolves[0], preys) : this.wolfCouncil(wolves, preys));
+    let victim;
+    if (this.parallelVotes) [, victim] = await Promise.all([seerTurn(), pack()]);
+    else { await seerTurn(); victim = await pack(); }
     for (const w of wolves) w.memory.push(`Nuit ${this.day} : la meute a attaqué ${victim.name}.`);
 
     // 3. Sorcière
@@ -1848,8 +1889,8 @@ Réponds en JSON : {
       this.publishSpeech(p, o, 1);
     }
     const voters = this.alive();
-    const results = [];
-    for (const p of voters) {
+    let done = 0;
+    const askMayor = async (p) => {
       const o = await this.ask(p, {
         kind: 'mayor_vote', options: voters,
         prompt: `${this.context(p)}
@@ -1859,9 +1900,12 @@ Réponds en JSON : {"pensee": "raisonnement privé, 1 à 2 phrases", "vote": num
         validate: this.targetValidator(voters, 'vote'),
         fallback: () => ({ pensee: '(vote blanc)', vote: 0 }),
       });
-      results.push({ p, o });
-      this.emit({ kind: 'ballot', n: results.length, total: voters.length });
-    }
+      this.emit({ kind: 'ballot', n: ++done, total: voters.length });
+      return { p, o };
+    };
+    let results;
+    if (this.parallelVotes) results = await Promise.all(voters.map(askMayor));
+    else { results = []; for (const p of voters) results.push(await askMayor(p)); }
     const tally = new Map();
     for (const { o } of results) if (o.vote) tally.set(o.vote, (tally.get(o.vote) || 0) + 1);
     if (!tally.size) for (const p of voters) tally.set(p.id, 0);

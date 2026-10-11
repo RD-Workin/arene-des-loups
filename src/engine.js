@@ -298,19 +298,21 @@ class Game {
       : '';
     const past = this.memoryFor ? this.memoryFor(p) : '';
     const memory = past ? `\nTES PARTIES PRÉCÉDENTES CONTRE LES MÊMES ADVERSAIRES (mêmes pseudonymes, rôles tirés à nouveau au hasard à chaque partie) :\n${past}\n` : '';
+    // Ordre choisi pour le cache des fournisseurs : ce qui ne change pas (règles, mémoire, rôle)
+    // vient d'abord, puis l'historique qui ne fait que s'allonger, et l'état du moment à la fin.
     return `${this.rules}
 ${memory}
 
 TOI
-Tu es ${p.name}. Ton rôle secret : ${p.role}.${potions}
+Tu es ${p.name}. Ton rôle secret : ${p.role}.
 Ce que toi seul sais :
 ${mem}
-${pack}
-ÉTAT
-${this.phase === 'night' ? `Nuit ${this.day}` : this.phase === 'mayor' ? 'Présentations et élection du Maire, avant la première nuit' : `Jour ${this.day}`}. Vivants : ${a}. Morts : ${dead}.${this.mayor ? ` Maire : ${this.mayor.name}.` : ''}
 
 HISTORIQUE PUBLIC
-${hist}`;
+${hist}
+${pack}
+ÉTAT
+${this.phase === 'night' ? `Nuit ${this.day}` : this.phase === 'mayor' ? 'Présentations et élection du Maire, avant la première nuit' : `Jour ${this.day}`}. Vivants : ${a}. Morts : ${dead}.${this.mayor ? ` Maire : ${this.mayor.name}.` : ''}${potions}`;
   }
 
   // Historique public envoyé aux joueurs. Les annonces du MJ (morts, votes, Maire) restent
@@ -430,8 +432,9 @@ ${hist}`;
     this.pub(`--- Nuit ${this.day} ---`);
     const nightStart = Date.now();
 
-    // 1. Voyante
+    // 1. Voyante, en même temps que les Loups (indépendants : on gagne un tour d'attente)
     const seer = this.alive().find((p) => p.roleKey === 'VOYANTE');
+    const seerTurn = async () => {
     if (!seer) await this.padTurn();
     if (seer) {
       const options = this.alive().filter((q) => q.id !== seer.id);
@@ -449,11 +452,15 @@ Réponds en JSON : {"pensee": "ton raisonnement privé, 1 à 3 phrases", "cible"
       if (this.isWolf(t)) seer.stats.seerFound++;
       this.emit({ kind: 'night', role: 'seer', secret: true, pid: seer.id, target: t.id, pensee: o.pensee, text: `La Voyante (${seer.name}) sonde ${t.name} : ${t.role}.` });
     }
+    };
 
     // 2. Loups : discussion sur le canal secret, puis vote de la meute
     const wolves = this.alive().filter((p) => this.isWolf(p));
     const preys = this.alive().filter((p) => !this.isWolf(p));
-    const victim = wolves.length === 1 ? await this.loneWolf(wolves[0], preys) : await this.wolfCouncil(wolves, preys);
+    const pack = () => (wolves.length === 1 ? this.loneWolf(wolves[0], preys) : this.wolfCouncil(wolves, preys));
+    let victim;
+    if (this.parallelVotes) [, victim] = await Promise.all([seerTurn(), pack()]);
+    else { await seerTurn(); victim = await pack(); }
     for (const w of wolves) w.memory.push(`Nuit ${this.day} : la meute a attaqué ${victim.name}.`);
 
     // 3. Sorcière
@@ -533,8 +540,8 @@ Réponds en JSON : {
       this.publishSpeech(p, o, 1);
     }
     const voters = this.alive();
-    const results = [];
-    for (const p of voters) {
+    let done = 0;
+    const askMayor = async (p) => {
       const o = await this.ask(p, {
         kind: 'mayor_vote', options: voters,
         prompt: `${this.context(p)}
@@ -544,9 +551,12 @@ Réponds en JSON : {"pensee": "raisonnement privé, 1 à 2 phrases", "vote": num
         validate: this.targetValidator(voters, 'vote'),
         fallback: () => ({ pensee: '(vote blanc)', vote: 0 }),
       });
-      results.push({ p, o });
-      this.emit({ kind: 'ballot', n: results.length, total: voters.length });
-    }
+      this.emit({ kind: 'ballot', n: ++done, total: voters.length });
+      return { p, o };
+    };
+    let results;
+    if (this.parallelVotes) results = await Promise.all(voters.map(askMayor));
+    else { results = []; for (const p of voters) results.push(await askMayor(p)); }
     const tally = new Map();
     for (const { o } of results) if (o.vote) tally.set(o.vote, (tally.get(o.vote) || 0) + 1);
     if (!tally.size) for (const p of voters) tally.set(p.id, 0);

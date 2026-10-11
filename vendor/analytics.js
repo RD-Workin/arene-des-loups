@@ -83,15 +83,17 @@
         case 'speech':
           push({
             type: 'speech', actor: ev.pid, round: ev.round, message: ev.message, thought: ev.pensee ?? null,
+            fallback: !!ev.fallback, leaks: ev.leaks || 0,
             claims: (ev.claims || []).map((c) => ({ target: c.joueur, role: c.role })),
           }, ev);
           break;
         case 'vote':
-          for (const v of ev.votes || []) push({ type: 'vote', actor: v.from, target: v.to, weight: v.weight ?? 1, thought: v.pensee ?? null }, ev);
+          // to: null = vote blanc (par ex. hors délai, fallback: true)
+          for (const v of ev.votes || []) push({ type: 'vote', actor: v.from, target: v.to ?? null, weight: v.weight ?? 1, fallback: !!v.fallback, thought: v.pensee ?? null }, ev);
           push({ type: 'elimination', target: ev.eliminated ?? null, role: ev.eliminated ? P.get(ev.eliminated)?.role : null }, ev);
           break;
         case 'error':
-          push({ type: 'error', actor: ev.pid, task: ev.task ?? null, error: ev.text }, ev);
+          push({ type: 'error', actor: ev.pid, task: ev.task ?? null, error: ev.detail ?? ev.text, text: ev.text ?? null }, ev);
           break;
         case 'wolf_chat': // canal secret de la meute, la nuit
           push({ type: 'wolf_chat', actor: ev.pid, round: ev.round ?? null, message: ev.message, proposal: ev.proposal ?? null, thought: ev.pensee ?? null }, ev);
@@ -101,7 +103,7 @@
           push({ type: 'wolf_decision', target: ev.target, unanimous: !!ev.unanimous, random: !!ev.random }, ev);
           break;
         case 'mayor': // élection du maire : votes + élu
-          for (const v of ev.votes || []) push({ type: 'mayor_vote', actor: v.from, target: v.to, thought: v.pensee ?? null }, ev);
+          for (const v of ev.votes || []) push({ type: 'mayor_vote', actor: v.from, target: v.to ?? null, fallback: !!v.fallback, thought: v.pensee ?? null }, ev);
           push({ type: 'mayor_elected', target: ev.elected ?? null }, ev);
           break;
         case 'mayor_succession': // le maire mort désigne son successeur
@@ -141,6 +143,8 @@
         },
         role: p.role,
         team: teamOf(p.role),
+        // Compteurs techniques du moteur (facultatif) : appels, durée, hors délai, fuites d'identité
+        stats: p.stats ? pickStats(p.stats) : null,
       })),
       outcome: {
         winner: game.winner,
@@ -149,6 +153,13 @@
       },
       events,
     };
+  }
+
+  const STAT_KEYS = ['calls', 'callMs', 'timeouts', 'errors', 'fallbacks', 'identityLeaks'];
+  function pickStats(st) {
+    const o = {};
+    for (const k of STAT_KEYS) if (typeof st[k] === 'number') o[k] = st[k];
+    return o;
   }
 
   function defaultLabel(seat) {
@@ -269,6 +280,8 @@
       decisions: 0, errors: 0,
       judge: { logique: [], persuasion: [], strategie: [] },
       tokens: 0, cost: 0, latency: [],
+      calls: 0, callMs: 0, callsKnown: 0, timeouts: 0, rawErrors: 0, identityLeaks: 0,
+      votesCast: 0, blankVotes: 0, timeoutVotes: 0,
       packVotes: 0, packFollowed: 0, packCouncils: 0, packUnanimous: 0, packMessages: 0,
       mayorGames: 0, mayorElected: 0, mayorWins: 0, mayorVoteShare: [], mayorWolf: 0,
       prog: [], // par rang de partie dans la série : { games, wins, vv, vvw, acc, accGood }
@@ -336,6 +349,12 @@
           if (mayorEv.target === p.id) { s.mayorElected++; if (won) s.mayorWins++; if (p.role === WOLF) s.mayorWolf++; }
         }
         if (idx != null) { const g = prog(s); g.games++; if (won) g.wins++; }
+        if (p.stats) {
+          if (typeof p.stats.calls === 'number') { s.calls += p.stats.calls; s.callMs += p.stats.callMs || 0; s.callsKnown++; }
+          s.timeouts += p.stats.timeouts || 0;
+          s.rawErrors += p.stats.errors || 0;
+          s.identityLeaks += p.stats.identityLeaks || 0;
+        }
       }
 
       // Par jour : accusations publiques puis votes, pour mesurer la persuasion
@@ -374,6 +393,7 @@
             const team = P.get(e.actor).team;
             const r = claimsBySeq.get(e.seq);
             if (s) { s.speeches++; s.speechesByTeam[team]++; s.words += words(e.message); }
+            if (s && !P.get(e.actor).stats) s.identityLeaks += e.leaks || 0;
             for (const c of r ? r.claims : []) {
               if (c.role === WOLF && !c.self) {
                 if (!accusations.has(e.day)) accusations.set(e.day, []);
@@ -392,10 +412,15 @@
             if (j && s) for (const f of ['logique', 'persuasion', 'strategie']) if (typeof j[f] === 'number') s.judge[f].push(j[f]);
             break;
           }
+          case 'mayor_vote':
+            if (s) { s.votesCast++; if (e.target == null) { s.blankVotes++; if (e.fallback) s.timeoutVotes++; } }
+            break;
           case 'vote': {
             if (!votesOfDay.has(e.day)) votesOfDay.set(e.day, []);
             votesOfDay.get(e.day).push({ actor: e.actor, target: e.target });
             if (!s) break;
+            s.votesCast++;
+            if (e.target == null) { s.blankVotes++; if (e.fallback) s.timeoutVotes++; break; } // vote blanc : hors précision
             const voter = P.get(e.actor), target = P.get(e.target);
             if (voter.team === 'village') {
               s.villageVotes++; if (target.role === WOLF) s.villageVotesOnWolf++;
@@ -601,7 +626,16 @@
         witchSaveRate: ratio(s.witchSaves, s.witchSavesAvailable),
         witchPoisonAccuracy: ratio(s.witchPoisonWolf, s.witchPoisonWolf + s.witchPoisonVillage),
       },
-      reliability: { decisions: s.decisions, errors: s.errors, errorRate: ratio(s.errors, s.decisions + s.errors) },
+      reliability: {
+        decisions: s.decisions, errors: s.errors, errorRate: ratio(s.errors, s.decisions + s.errors),
+        votesCast: s.votesCast, blankVotes: s.blankVotes, blankRate: ratio(s.blankVotes, s.votesCast), timeoutVotes: s.timeoutVotes,
+        calls: s.callsKnown ? s.calls : null,
+        avgCallMs: s.callsKnown ? ratio(s.callMs, s.calls) : null,
+        timeouts: s.timeouts,
+        timeoutRate: s.callsKnown ? ratio(s.timeouts, s.calls) : null,
+        identityLeaks: s.identityLeaks,
+        identityLeaksPerGame: ratio(s.identityLeaks, s.games),
+      },
       judge: {
         n: s.judge.logique.length,
         logique: avg(s.judge.logique),
@@ -652,12 +686,12 @@ Réponds uniquement avec un objet JSON valide.`;
       else if (e.type === 'wolf') lines.push(`[Nuit ${e.day}] (secret) Loup ${name(e.actor)} propose ${name(e.target)}${e.packMessage ? ` : « ${e.packMessage} »` : ''}.`);
       else if (e.type === 'wolf_chat') lines.push(`[Nuit ${e.day}] (canal des loups) ${name(e.actor)} : « ${e.message} »${e.proposal ? ` (propose ${name(e.proposal)})` : ''}`);
       else if (e.type === 'wolf_decision') lines.push(`[Nuit ${e.day}] (secret) La meute attaque ${name(e.target)}${e.unanimous ? ' à l\'unanimité' : e.random ? ' (tirage au sort)' : ' (majorité)'}.`);
-      else if (e.type === 'mayor_vote') lines.push(`[Élection du maire] ${name(e.actor)} → ${name(e.target)}`);
+      else if (e.type === 'mayor_vote') lines.push(`[Élection du maire] ${name(e.actor)} → ${e.target != null ? name(e.target) : 'vote blanc'}`);
       else if (e.type === 'mayor_elected') lines.push(`[Élection du maire] Élu : ${e.target ? name(e.target) : 'personne'}`);
       else if (e.type === 'witch') lines.push(`[Nuit ${e.day}] (secret) Sorcière ${name(e.actor)} : ${e.saved ? 'sauve' : 'ne sauve pas'} ${e.attacked ? name(e.attacked) : ''}${e.poison ? `, empoisonne ${name(e.poison)}` : ''}.`);
       else if (e.type === 'dawn') lines.push(`[Aube ${e.day}] Morts : ${(e.dead || []).map((d) => `${name(d.pid)} (${d.role})`).join(', ') || 'aucun'}.`);
       else if (e.type === 'speech') lines.push(`#${e.seq} [${e.phase === 'mayor' ? 'Campagne du maire' : `Jour ${e.day}`}] ${name(e.actor)} dit : « ${e.message} »${e.thought ? `  (pensée privée : ${e.thought})` : ''}`);
-      else if (e.type === 'vote') lines.push(`[Vote ${e.day}] ${name(e.actor)} → ${name(e.target)}`);
+      else if (e.type === 'vote') lines.push(`[Vote ${e.day}] ${name(e.actor)} → ${e.target != null ? name(e.target) : 'vote blanc'}`);
       else if (e.type === 'elimination') lines.push(`[Vote ${e.day}] Éliminé : ${e.target ? `${name(e.target)} (${e.role})` : 'personne (égalité)'}`);
     }
     lines.push('');
